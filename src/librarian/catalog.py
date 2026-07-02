@@ -19,18 +19,20 @@ from .config import Config
 # point is a human eyeball: "is this 'we don't have X' actually true?"
 ABSENCE_RE = re.compile(
     r"(not yet identified|not identified|\bTBD\b|to be determined|no source|"
-    r"we don'?t have|does ?n'?t exist|no such (?:doc|source|dataset)|never captured)", re.I)
+    r"we don'?t have|does ?n'?t exist|no such (?:doc|source|dataset)|never captured)",
+    re.I,
+)
 ABSENCE_SKIP_LINE = ("KB-CONTRADICTED", "KB-ACK", "absence-claim", "ABSENCE_")
 CONFLICT_MARKER = "<!-- KB-CONTRADICTED"
 
 
 @dataclass
 class CatalogResult:
-    items: list[dict] = field(default_factory=list)          # present docs + artifacts
+    items: list[dict] = field(default_factory=list)  # present docs + artifacts
     missing_fm: list[str] = field(default_factory=list)
-    fm_warnings: list[tuple[str, str]] = field(default_factory=list)   # (path, warning)
-    stale: list[tuple[str, str, str]] = field(default_factory=list)    # (id, path, why)
-    orphans: list[tuple[str, str]] = field(default_factory=list)       # (id, path)
+    fm_warnings: list[tuple[str, str]] = field(default_factory=list)  # (path, warning)
+    stale: list[tuple[str, str, str]] = field(default_factory=list)  # (id, path, why)
+    orphans: list[tuple[str, str]] = field(default_factory=list)  # (id, path)
     conflicts: list[tuple[str, int, str]] = field(default_factory=list)
     conflicts_ack: list[tuple[str, int, str]] = field(default_factory=list)
     absence_claims: list[tuple[str, int, str]] = field(default_factory=list)
@@ -97,8 +99,9 @@ def _recheck_days(value) -> int | None:
     return int(m.group(1)) if m else None
 
 
-def build(cfg: Config, today: datetime.date, artifacts: list[dict],
-          registry_errors: list[str] | None = None) -> CatalogResult:
+def build(
+    cfg: Config, today: datetime.date, artifacts: list[dict], registry_errors: list[str] | None = None
+) -> CatalogResult:
     res = CatalogResult(registry_errors=list(registry_errors or []))
     all_files = scanner.walk_files(cfg)
     md = scanner.md_files(cfg, all_files)
@@ -180,7 +183,6 @@ def build(cfg: Config, today: datetime.date, artifacts: list[dict],
                 if any(rx.search(line) for rx in absence_res):
                     res.absence_claims.append((path, i, line.strip()[:140]))
 
-    res.unverified = [d for d in items
-                      if str(d.get("authority", "curated")).lower() == "unverified"]
+    res.unverified = [d for d in items if str(d.get("authority", "curated")).lower() == "unverified"]
     res.items = items
     return res

@@ -21,8 +21,7 @@ def walk_files(cfg: Config) -> list[str]:
 
 
 def md_files(cfg: Config, all_files: list[str]) -> list[str]:
-    return [f for f in all_files
-            if f.endswith(".md") and os.path.basename(f) not in set(cfg.skip_files)]
+    return [f for f in all_files if f.endswith(".md") and os.path.basename(f) not in set(cfg.skip_files)]
 
 
 def inbox_pending(cfg: Config) -> list[str]:
@@ -37,7 +36,11 @@ def uncovered(cfg: Config, all_files: list[str], registered_paths: set[str]) -> 
     """Covered-extension files with no registry entry (coverage gaps)."""
     exts = tuple(cfg.covered_ext)
     skip_names = set(cfg.coverage_skip) | {cfg.artifacts_file}
-    return sorted(f for f in all_files
-                  if f.endswith(exts) and f not in registered_paths
-                  and os.path.basename(f) not in skip_names
-                  and f not in skip_names)
+    return sorted(
+        f
+        for f in all_files
+        if f.endswith(exts)
+        and f not in registered_paths
+        and os.path.basename(f) not in skip_names
+        and f not in skip_names
+    )

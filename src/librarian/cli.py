@@ -21,8 +21,9 @@ STALE_VERIFY_DAYS = 7
 
 
 def _add_common(p: argparse.ArgumentParser, *, json_flag: bool = True) -> None:
-    p.add_argument("--root", type=Path, default=None,
-                   help="repo root (default: walk up from cwd to .librarian.toml)")
+    p.add_argument(
+        "--root", type=Path, default=None, help="repo root (default: walk up from cwd to .librarian.toml)"
+    )
     p.add_argument("--quiet", action="store_true", help="suppress normal output")
     if json_flag:
         p.add_argument("--json", action="store_true", help="machine-readable output on stdout")
@@ -30,41 +31,53 @@ def _add_common(p: argparse.ArgumentParser, *, json_flag: bool = True) -> None:
 
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
-        prog="librarian",
-        description="A card catalog and a fact-checker for your repo's knowledge.")
+        prog="librarian", description="A card catalog and a fact-checker for your repo's knowledge."
+    )
     p.add_argument("--version", action="version", version=f"librarian {__version__}")
     sub = p.add_subparsers(dest="command", required=True)
 
     sp = sub.add_parser("init", help="scaffold the librarian into this repo")
     _add_common(sp, json_flag=False)
-    sp.add_argument("--agent", choices=["claude", "agents-md", "both", "none"], default="both",
-                    help="which agent glue to scaffold (default: both)")
+    sp.add_argument(
+        "--agent",
+        choices=["claude", "agents-md", "both", "none"],
+        default="both",
+        help="which agent glue to scaffold (default: both)",
+    )
     g = sp.add_mutually_exclusive_group()
-    g.add_argument("--upgrade", action="store_true",
-                   help="refresh unmodified scaffolded assets to this version")
-    g.add_argument("--uninstall", action="store_true",
-                   help="remove unmodified scaffolded assets + managed blocks")
+    g.add_argument(
+        "--upgrade", action="store_true", help="refresh unmodified scaffolded assets to this version"
+    )
+    g.add_argument(
+        "--uninstall", action="store_true", help="remove unmodified scaffolded assets + managed blocks"
+    )
 
     sp = sub.add_parser("index", help="rebuild _index/ (CATALOG.md, STALENESS.md, catalog.json)")
     _add_common(sp)
-    sp.add_argument("--check", action="store_true",
-                    help="exit 1 if any [index].fail_on category is non-empty (CI gate)")
+    sp.add_argument(
+        "--check", action="store_true", help="exit 1 if any [index].fail_on category is non-empty (CI gate)"
+    )
 
     sp = sub.add_parser("verify", help="fact-check doc claims against their live sources")
     _add_common(sp)
     sp.add_argument("--source", help="only checks of this source")
     sp.add_argument("--id", dest="id_glob", help="only check ids matching this glob")
     sp.add_argument("--kind", choices=["assert", "track"], help="only checks of this kind")
-    sp.add_argument("--update-baselines", action="store_true",
-                    help="record NEW/CHANGED track values as the new baselines")
-    sp.add_argument("--stamp", action="store_true",
-                    help="refresh last_verified in docs whose checks all pass")
+    sp.add_argument(
+        "--update-baselines", action="store_true", help="record NEW/CHANGED track values as the new baselines"
+    )
+    sp.add_argument(
+        "--stamp", action="store_true", help="refresh last_verified in docs whose checks all pass"
+    )
     sp.add_argument("--dry-run", action="store_true", help="don't write any state files")
 
     sp = sub.add_parser("status", help="one-screen health summary")
     _add_common(sp)
-    sp.add_argument("--hook", action="store_true",
-                    help="hook mode: silent when clean, one-line nudge otherwise, always exit 0")
+    sp.add_argument(
+        "--hook",
+        action="store_true",
+        help="hook mode: silent when clean, one-line nudge otherwise, always exit 0",
+    )
 
     sp = sub.add_parser("search", help="rank catalog entries for a task phrase")
     _add_common(sp)
@@ -85,8 +98,9 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("file", nargs="?", default=None, help="inbox filename (omit to list pending)")
     sp.add_argument("--domain", default=None)
     sp.add_argument("--status", default="reference")
-    sp.add_argument("--authority", default=None,
-                    help="trust tier from provenance (transcripts/third-party: unverified)")
+    sp.add_argument(
+        "--authority", default=None, help="trust tier from provenance (transcripts/third-party: unverified)"
+    )
     sp.add_argument("--dest", default="docs")
     sp.add_argument("--recheck", default="90d")
     sp.add_argument("--yes", action="store_true", help="accept defaults, no prompts")
@@ -114,8 +128,13 @@ def cmd_init(args, rep: Reporter) -> int:
         r = scaffold.uninstall(root)
     else:
         r = scaffold.init(root, agent=args.agent, upgrade=args.upgrade)
-    for label, items in (("written", r.written), ("updated", r.updated), ("removed", r.removed),
-                         ("kept (yours)", r.kept), ("unchanged", r.skipped)):
+    for label, items in (
+        ("written", r.written),
+        ("updated", r.updated),
+        ("removed", r.removed),
+        ("kept (yours)", r.kept),
+        ("unchanged", r.skipped),
+    ):
         for it in items:
             rep.say(f"  {label:12} {it}")
     for note in r.notes:
@@ -135,9 +154,11 @@ def _index_summary_line(res) -> str:
     s = res.summary()
     ack = f" (+{s['acknowledged_conflicts']} ack)" if s["acknowledged_conflicts"] else ""
     inbox = f" · {s['inbox_pending']} awaiting intake (_inbox)" if s["inbox_pending"] else ""
-    return (f"librarian index: {s['catalogued']} catalogued ({s['missing_frontmatter']} md-need-fm, "
-            f"{s['unregistered']} unregistered, {s['flagged']} flagged, {s['orphans']} orphaned, "
-            f"{s['open_conflicts']} open conflicts{ack}){inbox}")
+    return (
+        f"librarian index: {s['catalogued']} catalogued ({s['missing_frontmatter']} md-need-fm, "
+        f"{s['unregistered']} unregistered, {s['flagged']} flagged, {s['orphans']} orphaned, "
+        f"{s['open_conflicts']} open conflicts{ack}){inbox}"
+    )
 
 
 def cmd_index(args, rep: Reporter) -> int:
@@ -169,9 +190,14 @@ def cmd_verify(args, rep: Reporter) -> int:
         if args.stamp or cfg.stamp_docs:
             actions += verify.stamp_docs(cfg, run, config.today())
     if args.json:
-        rep.emit_json({"results": [r.to_dict() for r in run.results],
-                       "summary": run.counts(), "actions": actions,
-                       "exit_code": 1 if run.failed else 0})
+        rep.emit_json(
+            {
+                "results": [r.to_dict() for r in run.results],
+                "summary": run.counts(),
+                "actions": actions,
+                "exit_code": 1 if run.failed else 0,
+            }
+        )
     else:
         for r in run.results:
             pairs = [("expect", r.expect), ("baseline", r.baseline), ("live", r.live)]
@@ -185,8 +211,10 @@ def cmd_verify(args, rep: Reporter) -> int:
             rep.say(f"  {a}")
         c = run.counts()
         skips = f" · {c.get('SKIP', 0)} SKIP (source not connected)" if c.get("SKIP") else ""
-        rep.say(f"\n{len(run.results)} checks · {c.get('DRIFT', 0)} DRIFT · "
-                f"{c.get('CHANGED', 0)} CHANGED (track) · {c.get('ERROR', 0)} ERROR{skips}")
+        rep.say(
+            f"\n{len(run.results)} checks · {c.get('DRIFT', 0)} DRIFT · "
+            f"{c.get('CHANGED', 0)} CHANGED (track) · {c.get('ERROR', 0)} ERROR{skips}"
+        )
     return 1 if run.failed else 0
 
 
@@ -238,23 +266,38 @@ def cmd_status(args, rep: Reporter) -> int:
         attention.append(f"{s['frontmatter_warnings']} frontmatter warning(s)")
     verify_stale = bool(cfg.checks) and (age is None or age >= STALE_VERIFY_DAYS)
     if verify_stale:
-        attention.append("facts unverified " + (f"{age}d" if age is not None else "ever") +
-                         " — run `librarian verify`")
+        attention.append(
+            "facts unverified " + (f"{age}d" if age is not None else "ever") + " — run `librarian verify`"
+        )
 
     if args.hook:
         if attention:
             print("Librarian: " + " · ".join(attention) + f" — see {cfg.index_dir}/STALENESS.md")
         return 0
     if args.json:
-        rep.emit_json({"summary": s, "verify_age_days": age, "attention": attention,
-                       "flagged": s["flagged"], "unregistered": s["unregistered"]})
+        rep.emit_json(
+            {
+                "summary": s,
+                "verify_age_days": age,
+                "attention": attention,
+                "flagged": s["flagged"],
+                "unregistered": s["unregistered"],
+            }
+        )
         return 1 if attention else 0
-    rep.say(f"librarian status — {s['catalogued']} catalogued "
-            f"({s['docs']} docs + {s['artifacts']} artifacts, {s['domains']} domains)")
-    rep.say(f"  flagged: {s['flagged']} · unregistered code/data: {s['unregistered']} · "
-            f"absence-claims: {s['absence_claims']}")
-    rep.say("  facts last verified: " + (f"{age}d ago" if age is not None else "never") +
-            (f" · {len(cfg.checks)} checks configured" if cfg.checks else " · no checks configured"))
+    rep.say(
+        f"librarian status — {s['catalogued']} catalogued "
+        f"({s['docs']} docs + {s['artifacts']} artifacts, {s['domains']} domains)"
+    )
+    rep.say(
+        f"  flagged: {s['flagged']} · unregistered code/data: {s['unregistered']} · "
+        f"absence-claims: {s['absence_claims']}"
+    )
+    rep.say(
+        "  facts last verified: "
+        + (f"{age}d ago" if age is not None else "never")
+        + (f" · {len(cfg.checks)} checks configured" if cfg.checks else " · no checks configured")
+    )
     if attention:
         rep.say("  needs attention: " + " · ".join(attention))
         return 1
@@ -295,9 +338,19 @@ def cmd_search(args, rep: Reporter) -> int:
     scored.sort(key=lambda x: (-x[0], x[1]["path"]))
     top = scored[: args.n]
     if args.json:
-        rep.emit_json([{"score": s, "id": e.get("id"), "title": e.get("title"),
-                        "path": e["path"], "domain": e.get("domain"),
-                        "read_when": e.get("read_when", [])} for s, e in top])
+        rep.emit_json(
+            [
+                {
+                    "score": s,
+                    "id": e.get("id"),
+                    "title": e.get("title"),
+                    "path": e["path"],
+                    "domain": e.get("domain"),
+                    "read_when": e.get("read_when", []),
+                }
+                for s, e in top
+            ]
+        )
         return 0 if top else 1
     if not top:
         rep.say("no matches — try `librarian index` to refresh, or grep")
@@ -316,21 +369,29 @@ def cmd_backfill(args, rep: Reporter) -> int:
         return 0
     mode = "APPLYING" if args.write else "DRY RUN"
     auth = f" authority={args.authority}" if args.authority else ""
-    rep.say(f"{mode} — {len(targets)} file(s) need frontmatter "
-            f"(domain={args.domain} status={args.status}{auth}):")
+    rep.say(
+        f"{mode} — {len(targets)} file(s) need frontmatter (domain={args.domain} status={args.status}{auth}):"
+    )
     for _, p, _text in targets:
-        rep.say(f"  {'stamped' if args.write else 'would stamp'}: {p.path}  "
-                f"(id={p.id}, title=\"{p.title}\")")
+        rep.say(f'  {"stamped" if args.write else "would stamp"}: {p.path}  (id={p.id}, title="{p.title}")')
     if args.write:
-        backfill.apply(cfg, targets, domain=args.domain, status=args.status,
-                       authority=args.authority, recheck=args.recheck, today=config.today())
+        backfill.apply(
+            cfg,
+            targets,
+            domain=args.domain,
+            status=args.status,
+            authority=args.authority,
+            recheck=args.recheck,
+            today=config.today(),
+        )
         res = _build_catalog(cfg)
         render.write_all(cfg, res)
-        rep.say(f"\nDone. Reindexed. The {len(targets)} new docs show as status={args.status} in "
-                f"{cfg.index_dir}/STALENESS.md — that's your triage worklist.")
+        rep.say(
+            f"\nDone. Reindexed. The {len(targets)} new docs show as status={args.status} in "
+            f"{cfg.index_dir}/STALENESS.md — that's your triage worklist."
+        )
     else:
-        rep.say("\nRe-run with --write to apply. Then refine each doc's domain/read_when/"
-                "status/authority.")
+        rep.say("\nRe-run with --write to apply. Then refine each doc's domain/read_when/status/authority.")
     return 0
 
 
@@ -351,23 +412,31 @@ def cmd_ingest(args, rep: Reporter) -> int:
         rep.say(f"{len(pend)} file(s) awaiting intake in {cfg.inbox_dir}/:")
         for f in pend:
             rep.say(f"  {f}")
-        rep.say("\nIngest one with: librarian ingest <file> "
-                "[--domain X --authority unverified --dest docs]")
+        rep.say("\nIngest one with: librarian ingest <file> [--domain X --authority unverified --dest docs]")
         return 0
     domain = args.domain or _prompt("domain", "uncategorized", yes=args.yes)
     authority = args.authority or _prompt(
-        "authority (verified/curated/unverified — transcripts are unverified)", "curated",
-        yes=args.yes)
+        "authority (verified/curated/unverified — transcripts are unverified)", "curated", yes=args.yes
+    )
     dest = args.dest or _prompt("destination directory", "docs", yes=args.yes)
     try:
-        result = ingest.ingest_file(cfg, args.file, domain=domain, status=args.status,
-                                    authority=authority, dest=dest, recheck=args.recheck,
-                                    today=config.today())
+        result = ingest.ingest_file(
+            cfg,
+            args.file,
+            domain=domain,
+            status=args.status,
+            authority=authority,
+            dest=dest,
+            recheck=args.recheck,
+            today=config.today(),
+        )
     except (FileNotFoundError, FileExistsError) as e:
         rep.error(str(e))
         return 2
-    rep.say(f"  filed: {cfg.inbox_dir}/{args.file} -> {result.moved_to}"
-            + (" (frontmatter added)" if result.frontmatter_added else ""))
+    rep.say(
+        f"  filed: {cfg.inbox_dir}/{args.file} -> {result.moved_to}"
+        + (" (frontmatter added)" if result.frontmatter_added else "")
+    )
     if result.artifact_block:
         rep.say(f"\n  non-markdown artifact — add this entry to {cfg.artifacts_file}:\n")
         rep.say(result.artifact_block)
@@ -390,8 +459,14 @@ def cmd_doctor(args, rep: Reporter) -> int:
 
 
 COMMANDS = {
-    "init": cmd_init, "index": cmd_index, "verify": cmd_verify, "status": cmd_status,
-    "search": cmd_search, "backfill": cmd_backfill, "ingest": cmd_ingest, "doctor": cmd_doctor,
+    "init": cmd_init,
+    "index": cmd_index,
+    "verify": cmd_verify,
+    "status": cmd_status,
+    "search": cmd_search,
+    "backfill": cmd_backfill,
+    "ingest": cmd_ingest,
+    "doctor": cmd_doctor,
 }
 
 

@@ -14,8 +14,7 @@ import tomllib
 from .config import Config, ConfigError
 
 REQUIRED = ("path", "id", "title", "domain", "kind", "status")
-OPTIONAL = ("last_verified", "recheck", "read_when", "tags", "desc", "source_of_truth",
-            "authority", "owner")
+OPTIONAL = ("last_verified", "recheck", "read_when", "tags", "desc", "source_of_truth", "authority", "owner")
 
 
 def load(cfg: Config) -> tuple[list[dict], list[str]]:

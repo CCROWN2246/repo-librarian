@@ -23,8 +23,7 @@ class HookTests(unittest.TestCase):
 
     def test_scripts_parse(self):
         for rel in (".githooks/pre-commit", ".claude/hooks/librarian-session.sh"):
-            proc = subprocess.run([BASH, "-n", str(self.root / rel)],
-                                  capture_output=True, text=True)
+            proc = subprocess.run([BASH, "-n", str(self.root / rel)], capture_output=True, text=True)
             self.assertEqual(proc.returncode, 0, f"{rel}: {proc.stderr}")
 
     def test_hooks_degrade_without_librarian_on_path(self):
@@ -32,10 +31,10 @@ class HookTests(unittest.TestCase):
         env = dict(os.environ, PATH="/usr/bin:/bin")
         subprocess.run(["git", "init", "-q"], cwd=self.root, env=env, check=True)
         for rel in (".githooks/pre-commit", ".claude/hooks/librarian-session.sh"):
-            proc = subprocess.run([BASH, str(self.root / rel)], cwd=self.root,
-                                  env=env, capture_output=True, text=True)
-            self.assertEqual(proc.returncode, 0, f"{rel} must exit 0 without librarian: "
-                             f"{proc.stderr}")
+            proc = subprocess.run(
+                [BASH, str(self.root / rel)], cwd=self.root, env=env, capture_output=True, text=True
+            )
+            self.assertEqual(proc.returncode, 0, f"{rel} must exit 0 without librarian: {proc.stderr}")
 
     def test_pre_commit_executable_bit(self):
         self.assertTrue(os.access(self.root / ".githooks" / "pre-commit", os.X_OK))

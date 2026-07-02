@@ -14,7 +14,7 @@ from .config import Config
 
 @dataclass
 class Finding:
-    level: str   # ok | warn | problem
+    level: str  # ok | warn | problem
     message: str
 
 
@@ -55,8 +55,8 @@ def run(cfg: Config) -> DoctorReport:
     if (cfg.root / ".git").exists():
         try:
             hooks_path = subprocess.run(
-                ["git", "config", "core.hooksPath"], cwd=cfg.root,
-                capture_output=True, text=True, timeout=10).stdout.strip()
+                ["git", "config", "core.hooksPath"], cwd=cfg.root, capture_output=True, text=True, timeout=10
+            ).stdout.strip()
         except (OSError, subprocess.TimeoutExpired):
             hooks_path = ""
         pre_commit = cfg.root / ".githooks" / "pre-commit"
@@ -64,8 +64,10 @@ def run(cfg: Config) -> DoctorReport:
             if hooks_path == ".githooks":
                 rep.ok("git core.hooksPath = .githooks (pre-commit active)")
             else:
-                rep.warn("pre-commit hook exists but core.hooksPath is not set — run: "
-                         "git config core.hooksPath .githooks")
+                rep.warn(
+                    "pre-commit hook exists but core.hooksPath is not set — run: "
+                    "git config core.hooksPath .githooks"
+                )
             if os.name != "nt" and not os.access(pre_commit, os.X_OK):
                 rep.problem(".githooks/pre-commit is not executable — run: chmod +x .githooks/pre-commit")
     else:
@@ -83,19 +85,23 @@ def run(cfg: Config) -> DoctorReport:
         used = sum(1 for c in cfg.checks if c.source == name)
         unset = [v for v in src.skip_if_unset if not os.environ.get(v)]
         if unset:
-            rep.warn(f"source {name!r} ({used} checks): env not set ({', '.join(unset)}) — "
-                     "its checks will SKIP")
+            rep.warn(
+                f"source {name!r} ({used} checks): env not set ({', '.join(unset)}) — its checks will SKIP"
+            )
             continue
         if src.skip_unless:
             probe_cmd = src.skip_unless
             try:
-                probe = subprocess.run(["/bin/sh", "-c", probe_cmd], cwd=cfg.root,
-                                       capture_output=True, text=True, timeout=30)
+                probe = subprocess.run(
+                    ["/bin/sh", "-c", probe_cmd], cwd=cfg.root, capture_output=True, text=True, timeout=30
+                )
                 if probe.returncode == 0:
                     rep.ok(f"source {name!r} ({used} checks): probe passed")
                 else:
-                    rep.warn(f"source {name!r} ({used} checks): probe failed "
-                             f"(exit {probe.returncode}) — its checks will SKIP")
+                    rep.warn(
+                        f"source {name!r} ({used} checks): probe failed "
+                        f"(exit {probe.returncode}) — its checks will SKIP"
+                    )
             except (OSError, subprocess.TimeoutExpired) as e:
                 rep.warn(f"source {name!r}: probe errored ({e}) — its checks will SKIP")
         else:
@@ -107,11 +113,14 @@ def run(cfg: Config) -> DoctorReport:
     baselines = verify.load_baselines(cfg)
     orphan_baselines = sorted(set(baselines) - {c.id for c in cfg.checks})
     if orphan_baselines:
-        rep.warn(f"baselines with no matching check (pruned by --update-baselines): "
-                 f"{', '.join(orphan_baselines)}")
+        rep.warn(
+            f"baselines with no matching check (pruned by --update-baselines): {', '.join(orphan_baselines)}"
+        )
 
     # PATH check for hooks
     if shutil.which("librarian") is None:
-        rep.warn("`librarian` is not on PATH — shell hooks will silently no-op "
-                 "(pipx ensurepath, or install with pip)")
+        rep.warn(
+            "`librarian` is not on PATH — shell hooks will silently no-op "
+            "(pipx ensurepath, or install with pip)"
+        )
     return rep

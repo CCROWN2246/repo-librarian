@@ -40,7 +40,7 @@ class CheckResult:
     kind: str
     doc: str
     source: str
-    status: str                 # PASS DRIFT OK CHANGED NEW SKIP ERROR
+    status: str  # PASS DRIFT OK CHANGED NEW SKIP ERROR
     live: str | None = None
     expect: str | None = None
     baseline: str | None = None
@@ -70,15 +70,16 @@ class _Skip(Exception):
 
 
 def _run_cmd(cmd: str, cwd: Path, timeout: int) -> subprocess.CompletedProcess:
-    return subprocess.run(["/bin/sh", "-c", cmd], cwd=cwd, timeout=timeout,
-                          capture_output=True, text=True)
+    return subprocess.run(["/bin/sh", "-c", cmd], cwd=cwd, timeout=timeout, capture_output=True, text=True)
 
 
-def _check_skips(check: Check, source: Source | None, cwd: Path, timeout: int,
-                 probe_cache: dict[str, bool]) -> None:
+def _check_skips(
+    check: Check, source: Source | None, cwd: Path, timeout: int, probe_cache: dict[str, bool]
+) -> None:
     """Raise _Skip if any skip condition applies (env vars, then probe commands)."""
-    unset = [v for v in (check.skip_if_unset + (source.skip_if_unset if source else []))
-             if not os.environ.get(v)]
+    unset = [
+        v for v in (check.skip_if_unset + (source.skip_if_unset if source else [])) if not os.environ.get(v)
+    ]
     if unset:
         raise _Skip(f"env not set: {', '.join(unset)}")
     for probe in filter(None, [check.skip_unless, source.skip_unless if source else None]):
@@ -112,11 +113,13 @@ def save_baselines(cfg: Config, baselines: dict) -> None:
     out = cfg.path(cfg.index_dir)
     out.mkdir(parents=True, exist_ok=True)
     (out / BASELINES_FILE).write_text(
-        json.dumps(baselines, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        json.dumps(baselines, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
 
 
-def run(cfg: Config, *, only_source: str | None = None, only_id: str | None = None,
-        only_kind: str | None = None) -> RunResult:
+def run(
+    cfg: Config, *, only_source: str | None = None, only_id: str | None = None, only_kind: str | None = None
+) -> RunResult:
     baselines = load_baselines(cfg)
     probe_cache: dict[str, bool] = {}
     out = RunResult()
@@ -129,18 +132,20 @@ def run(cfg: Config, *, only_source: str | None = None, only_id: str | None = No
             continue
         source = cfg.sources.get(check.source)
         timeout = check.timeout or (source.timeout if source else None) or cfg.default_timeout
-        rec = CheckResult(id=check.id, kind=check.kind, doc=check.doc,
-                          source=check.source, status="ERROR")
+        rec = CheckResult(id=check.id, kind=check.kind, doc=check.doc, source=check.source, status="ERROR")
         try:
             _check_skips(check, source, cfg.root, timeout, probe_cache)
             cmd = _resolve_cmd(check, source)
             proc = _run_cmd(cmd, cfg.root, timeout)
             if proc.returncode == SKIP_EXIT_CODE:
-                raise _Skip(f"command exited {SKIP_EXIT_CODE} (SKIP contract)"
-                            + (f": {proc.stderr.strip()[:200]}" if proc.stderr.strip() else ""))
+                raise _Skip(
+                    f"command exited {SKIP_EXIT_CODE} (SKIP contract)"
+                    + (f": {proc.stderr.strip()[:200]}" if proc.stderr.strip() else "")
+                )
             if proc.returncode != 0 and check.extract != "exit_code":
-                raise RuntimeError(f"command exited {proc.returncode}: "
-                                   f"{(proc.stderr.strip() or proc.stdout.strip())[:300]}")
+                raise RuntimeError(
+                    f"command exited {proc.returncode}: {(proc.stderr.strip() or proc.stdout.strip())[:300]}"
+                )
             live = extractors.extract(check.extract, proc.stdout, proc.returncode)
             rec.live = live
             if check.kind == "assert":
@@ -177,8 +182,11 @@ def update_baselines(cfg: Config, run_result: RunResult, today: date) -> list[st
         if r.kind == "track" and r.status in ("NEW", "CHANGED") and r.live is not None:
             old = baselines.get(r.id, {}).get("value")
             baselines[r.id] = {"value": r.live, "recorded": today.isoformat()}
-            actions.append(f"{r.id}: baseline {old!r} -> {r.live!r}" if old is not None
-                           else f"{r.id}: baseline recorded {r.live!r}")
+            actions.append(
+                f"{r.id}: baseline {old!r} -> {r.live!r}"
+                if old is not None
+                else f"{r.id}: baseline recorded {r.live!r}"
+            )
     known = {c.id for c in cfg.checks}
     for orphan in sorted(set(baselines) - known):
         del baselines[orphan]

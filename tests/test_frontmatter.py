@@ -78,13 +78,21 @@ class ParseTests(unittest.TestCase):
     def test_span_ends_after_fence(self):
         text = "---\nid: a\n---\nbody"
         r = fm.parse(text)
-        self.assertEqual(text[r.span[1]:], "body")
+        self.assertEqual(text[r.span[1] :], "body")
 
 
 class SerializeTests(unittest.TestCase):
     def test_field_order_and_roundtrip(self):
-        meta = {"tags": ["x"], "id": "a", "title": "T", "zeta": "z", "domain": "d",
-                "status": "draft", "last_verified": "2026-01-01", "has_disputed_claims": True}
+        meta = {
+            "tags": ["x"],
+            "id": "a",
+            "title": "T",
+            "zeta": "z",
+            "domain": "d",
+            "status": "draft",
+            "last_verified": "2026-01-01",
+            "has_disputed_claims": True,
+        }
         out = fm.serialize(meta)
         lines = out.splitlines()
         self.assertEqual(lines[0], "---")

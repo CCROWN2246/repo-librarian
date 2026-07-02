@@ -50,7 +50,7 @@ class DemoE2ETests(unittest.TestCase):
         self.assertEqual(by_id["active_station_count"]["status"], "PASS")
 
         code, out, _ = self.run_cli("status")
-        self.assertEqual(code, 1)   # open conflict + inbox item -> attention
+        self.assertEqual(code, 1)  # open conflict + inbox item -> attention
         self.assertIn("OPEN conflict", out)
 
         code, out, _ = self.run_cli("search", "write", "a", "query")
@@ -68,11 +68,11 @@ class DemoE2ETests(unittest.TestCase):
     def test_fixing_the_doc_clears_the_drift(self):
         schema = self.root / "docs" / "schema.md"
         text = schema.read_text(encoding="utf-8").replace(
-            "Every station has 20 docks", "Docks per station vary (15–20)")
+            "Every station has 20 docks", "Docks per station vary (15–20)"
+        )
         schema.write_text(text, encoding="utf-8")
         cfg_path = self.root / ".librarian.toml"
-        cfg_text = cfg_path.read_text(encoding="utf-8").replace(
-            'expect  = "20"', 'expect  = "15"')
+        cfg_text = cfg_path.read_text(encoding="utf-8").replace('expect  = "20"', 'expect  = "15"')
         cfg_path.write_text(cfg_text, encoding="utf-8")
         code, _, _ = self.run_cli("verify", "--id", "min_dock_count_is_20")
         self.assertEqual(code, 0)

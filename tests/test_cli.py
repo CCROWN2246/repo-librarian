@@ -12,8 +12,7 @@ class CliCase(RepoCase):
     def run_cli(self, *argv):
         out, err = io.StringIO(), io.StringIO()
         with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
-            code = cli.main(["--root", str(self.root), *argv]
-                            if argv and argv[0] != "--root" else list(argv))
+            code = cli.main(["--root", str(self.root), *argv] if argv and argv[0] != "--root" else list(argv))
         return code, out.getvalue(), err.getvalue()
 
     def run_sub(self, command, *argv):
@@ -34,8 +33,7 @@ class CliTests(CliCase):
 
     def test_index_check_gate(self):
         self.write("docs/plain.md", "# no fm\n")
-        self.write(".librarian.toml",
-                   "schema_version = 1\n[index]\nfail_on = ['missing_frontmatter']\n")
+        self.write(".librarian.toml", "schema_version = 1\n[index]\nfail_on = ['missing_frontmatter']\n")
         code, _, err = self.run_sub("index", "--check")
         self.assertEqual(code, 1)
         self.assertIn("missing_frontmatter", err)
@@ -49,9 +47,11 @@ class CliTests(CliCase):
 
     @unittest.skipUnless(os.name != "nt", "verify shells out via /bin/sh (POSIX only)")
     def test_verify_drift_exit1(self):
-        self.write(".librarian.toml",
-                   "schema_version = 1\n[[verify.checks]]\nid='x'\nkind='assert'\n"
-                   "doc='d.md'\ncmd='echo 2'\nexpect='1'\n")
+        self.write(
+            ".librarian.toml",
+            "schema_version = 1\n[[verify.checks]]\nid='x'\nkind='assert'\n"
+            "doc='d.md'\ncmd='echo 2'\nexpect='1'\n",
+        )
         code, out, _ = self.run_sub("verify")
         self.assertEqual(code, 1)
         self.assertIn("DRIFT", out)
@@ -59,9 +59,11 @@ class CliTests(CliCase):
 
     @unittest.skipUnless(os.name != "nt", "verify shells out via /bin/sh (POSIX only)")
     def test_verify_json(self):
-        self.write(".librarian.toml",
-                   "schema_version = 1\n[[verify.checks]]\nid='x'\nkind='assert'\n"
-                   "doc='d.md'\ncmd='echo 1'\nexpect='1'\n")
+        self.write(
+            ".librarian.toml",
+            "schema_version = 1\n[[verify.checks]]\nid='x'\nkind='assert'\n"
+            "doc='d.md'\ncmd='echo 1'\nexpect='1'\n",
+        )
         code, out, _ = self.run_sub("verify", "--json")
         self.assertEqual(code, 0)
         data = json.loads(out)
@@ -71,10 +73,10 @@ class CliTests(CliCase):
     def test_status_flow(self):
         self.write("docs/a.md", make_doc(last_verified="2026-07-01"))
         code, out, _ = self.run_sub("status")
-        self.assertEqual(code, 1)                    # no catalog yet
+        self.assertEqual(code, 1)  # no catalog yet
         self.run_sub("index")
         code, out, _ = self.run_sub("status")
-        self.assertEqual(code, 0)                    # clean (no checks configured)
+        self.assertEqual(code, 0)  # clean (no checks configured)
         self.assertIn("clean", out)
         # hook mode: always exit 0, silent when clean
         code, out, _ = self.run_sub("status", "--hook")
@@ -93,8 +95,7 @@ class CliTests(CliCase):
         self.run_sub("index")
         code, out, _ = self.run_sub("search", "write", "athena", "query")
         self.assertEqual(code, 0)
-        self.assertLess(out.index("schema"), out.index("other")
-                        if "other" in out else len(out) + 1)
+        self.assertLess(out.index("schema"), out.index("other") if "other" in out else len(out) + 1)
         code, _, _ = self.run_sub("search", "zzz-no-match-zzz")
         self.assertEqual(code, 1)
 
@@ -106,6 +107,7 @@ class CliTests(CliCase):
 
     def test_no_config_exit2(self):
         import tempfile
+
         with tempfile.TemporaryDirectory() as empty:
             out, err = io.StringIO(), io.StringIO()
             with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):

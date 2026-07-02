@@ -20,7 +20,7 @@ from .config import Config
 
 @dataclass
 class BackfillPlan:
-    path: str          # repo-relative
+    path: str  # repo-relative
     id: str
     title: str
 
@@ -42,8 +42,9 @@ def title_of(text: str, rel: str) -> str:
     return base.strip().title() or "Untitled"
 
 
-def skeleton(rel: str, text: str, *, domain: str, status: str, authority: str | None,
-             recheck: str, today: date) -> str:
+def skeleton(
+    rel: str, text: str, *, domain: str, status: str, authority: str | None, recheck: str, today: date
+) -> str:
     meta = {"id": slug(rel), "title": title_of(text, rel), "domain": domain, "status": status}
     if authority:
         meta["authority"] = authority
@@ -73,11 +74,21 @@ def plan(cfg: Config, target: str | None = None) -> list[tuple[Path, BackfillPla
     return out
 
 
-def apply(cfg: Config, targets: list[tuple[Path, BackfillPlan, str]], *, domain: str,
-          status: str, authority: str | None, recheck: str, today: date) -> int:
+def apply(
+    cfg: Config,
+    targets: list[tuple[Path, BackfillPlan, str]],
+    *,
+    domain: str,
+    status: str,
+    authority: str | None,
+    recheck: str,
+    today: date,
+) -> int:
     for ap, p, text in targets:
         ap.write_text(
-            skeleton(p.path, text, domain=domain, status=status, authority=authority,
-                     recheck=recheck, today=today),
-            encoding="utf-8")
+            skeleton(
+                p.path, text, domain=domain, status=status, authority=authority, recheck=recheck, today=today
+            ),
+            encoding="utf-8",
+        )
     return len(targets)

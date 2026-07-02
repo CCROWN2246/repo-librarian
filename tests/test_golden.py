@@ -45,9 +45,12 @@ class GoldenTests(unittest.TestCase):
         for name, text in self.render_all().items():
             with self.subTest(file=name):
                 expected = (GOLDEN / name).read_text(encoding="utf-8")
-                self.assertEqual(text, expected,
-                                 f"{name} drifted from tests/golden/ — if the change is "
-                                 "deliberate, regenerate the goldens (see module docstring)")
+                self.assertEqual(
+                    text,
+                    expected,
+                    f"{name} drifted from tests/golden/ — if the change is "
+                    "deliberate, regenerate the goldens (see module docstring)",
+                )
 
     def test_demo_index_committed_in_sync(self):
         # The demo repo commits its _index/ so GitHub browsers can read the catalog;
@@ -55,9 +58,11 @@ class GoldenTests(unittest.TestCase):
         for name, text in self.render_all().items():
             with self.subTest(file=name):
                 committed = (DEMO / "_index" / name).read_text(encoding="utf-8")
-                self.assertEqual(text, committed,
-                                 f"examples/demo-repo/_index/{name} is out of date — "
-                                 "regenerate it (see module docstring)")
+                self.assertEqual(
+                    text,
+                    committed,
+                    f"examples/demo-repo/_index/{name} is out of date — regenerate it (see module docstring)",
+                )
 
     def test_deterministic(self):
         self.assertEqual(self.render_all(), self.render_all())

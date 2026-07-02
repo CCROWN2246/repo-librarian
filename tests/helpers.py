@@ -33,8 +33,15 @@ body text
 
 
 def make_doc(**kw) -> str:
-    defaults = dict(id="doc-a", title="Doc A", domain="data", status="authoritative",
-                    last_verified="2026-06-01", recheck="90d", read_when="a task")
+    defaults = dict(
+        id="doc-a",
+        title="Doc A",
+        domain="data",
+        status="authoritative",
+        last_verified="2026-06-01",
+        recheck="90d",
+        read_when="a task",
+    )
     defaults.update(kw)
     return GOOD_DOC.format(**defaults)
 

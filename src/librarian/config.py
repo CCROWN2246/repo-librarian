@@ -21,7 +21,14 @@ CONFIG_NAME = ".librarian.toml"
 ALWAYS_SKIP = {".git", "__pycache__", ".ruff_cache", ".pytest_cache"}
 
 DEFAULT_SKIP_DIRS = [
-    ".git", ".claude", "tests", "node_modules", "__pycache__", "backups", ".venv", "venv",
+    ".git",
+    ".claude",
+    "tests",
+    "node_modules",
+    "__pycache__",
+    "backups",
+    ".venv",
+    "venv",
 ]
 DEFAULT_SKIP_FILES = ["CLAUDE.md", "AGENTS.md", "KNOWLEDGE_PROTOCOL.md"]
 DEFAULT_COVERED_EXT = [".sql", ".py", ".json", ".sh", ".ipynb"]
@@ -32,7 +39,12 @@ DEFAULT_REQUIRED_ART = ["id", "title", "domain", "status"]
 DEFAULT_INBOX_IGNORE = ["README.md", ".gitkeep"]
 
 FAIL_ON_CATEGORIES = {
-    "missing_frontmatter", "unregistered", "orphans", "open_conflicts", "taxonomy", "fm_warnings",
+    "missing_frontmatter",
+    "unregistered",
+    "orphans",
+    "open_conflicts",
+    "taxonomy",
+    "fm_warnings",
 }
 
 
@@ -43,8 +55,8 @@ class ConfigError(Exception):
 @dataclass
 class Source:
     name: str
-    command: str | None = None        # template with {arg}
-    skip_unless: str | None = None    # probe command; nonzero exit -> SKIP all checks of this source
+    command: str | None = None  # template with {arg}
+    skip_unless: str | None = None  # probe command; nonzero exit -> SKIP all checks of this source
     skip_if_unset: list[str] = field(default_factory=list)
     timeout: int | None = None
 
@@ -52,7 +64,7 @@ class Source:
 @dataclass
 class Check:
     id: str
-    kind: str                          # assert | track
+    kind: str  # assert | track
     doc: str
     cmd: str | None = None
     arg: str | None = None
@@ -161,35 +173,58 @@ def load(root: Path) -> Config:
     if schema_version != 1:
         raise ConfigError(f"unsupported schema_version {schema_version} (this librarian supports 1)")
 
-    paths = _take(data.pop("paths", {}), "[paths]", {
-        "index": str, "inbox": str, "archive": str, "docs": str, "artifacts": str})
+    paths = _take(
+        data.pop("paths", {}),
+        "[paths]",
+        {"index": str, "inbox": str, "archive": str, "docs": str, "artifacts": str},
+    )
     cfg.index_dir = paths.get("index", cfg.index_dir)
     cfg.inbox_dir = paths.get("inbox", cfg.inbox_dir)
     cfg.archive_dir = paths.get("archive", cfg.archive_dir)
     cfg.docs_dir = paths.get("docs", cfg.docs_dir)
     cfg.artifacts_file = paths.get("artifacts", cfg.artifacts_file)
 
-    scan = _take(data.pop("scan", {}), "[scan]", {
-        "skip_dirs": list, "skip_files": list, "covered_ext": list,
-        "coverage_skip": list, "inbox_ignore": list})
+    scan = _take(
+        data.pop("scan", {}),
+        "[scan]",
+        {
+            "skip_dirs": list,
+            "skip_files": list,
+            "covered_ext": list,
+            "coverage_skip": list,
+            "inbox_ignore": list,
+        },
+    )
     for k in scan:
         setattr(cfg, k, scan[k])
 
-    tax = _take(data.pop("taxonomy", {}), "[taxonomy]", {
-        "domains": list, "statuses": list, "authorities": list,
-        "required_doc_fields": list, "required_artifact_fields": list})
+    tax = _take(
+        data.pop("taxonomy", {}),
+        "[taxonomy]",
+        {
+            "domains": list,
+            "statuses": list,
+            "authorities": list,
+            "required_doc_fields": list,
+            "required_artifact_fields": list,
+        },
+    )
     for k in tax:
         setattr(cfg, k, tax[k])
 
-    idx = _take(data.pop("index", {}), "[index]", {
-        "absence_guard": bool, "absence_extra_patterns": list, "fail_on": list})
+    idx = _take(
+        data.pop("index", {}),
+        "[index]",
+        {"absence_guard": bool, "absence_extra_patterns": list, "fail_on": list},
+    )
     cfg.absence_guard = idx.get("absence_guard", cfg.absence_guard)
     cfg.absence_extra_patterns = idx.get("absence_extra_patterns", cfg.absence_extra_patterns)
     cfg.fail_on = idx.get("fail_on", cfg.fail_on)
     bad = set(cfg.fail_on) - FAIL_ON_CATEGORIES
     if bad:
-        raise ConfigError(f"[index].fail_on: unknown categories {sorted(bad)} "
-                          f"(valid: {sorted(FAIL_ON_CATEGORIES)})")
+        raise ConfigError(
+            f"[index].fail_on: unknown categories {sorted(bad)} (valid: {sorted(FAIL_ON_CATEGORIES)})"
+        )
 
     verify = data.pop("verify", {})
     if not isinstance(verify, dict):
@@ -203,8 +238,11 @@ def load(root: Path) -> Config:
     for name, tbl in sources_tbl.items():
         if not isinstance(tbl, dict):
             raise ConfigError(f"[verify.sources.{name}]: expected a table")
-        s = _take(dict(tbl), f"[verify.sources.{name}]", {
-            "command": str, "skip_unless": str, "skip_if_unset": list, "timeout": int})
+        s = _take(
+            dict(tbl),
+            f"[verify.sources.{name}]",
+            {"command": str, "skip_unless": str, "skip_if_unset": list, "timeout": int},
+        )
         cfg.sources[name] = Source(name=name, **s)
 
     if not isinstance(checks_list, list):
@@ -217,10 +255,23 @@ def load(root: Path) -> Config:
         if "layer" in tbl and "source" not in tbl:  # legacy alias
             tbl["source"] = tbl.pop("layer")
         where = f"[[verify.checks]] #{n} (id={tbl.get('id', '?')})"
-        c = _take(tbl, where, {
-            "id": str, "kind": str, "doc": str, "cmd": str, "arg": str, "source": str,
-            "extract": str, "expect": str, "timeout": int, "skip_if_unset": list,
-            "skip_unless": str})
+        c = _take(
+            tbl,
+            where,
+            {
+                "id": str,
+                "kind": str,
+                "doc": str,
+                "cmd": str,
+                "arg": str,
+                "source": str,
+                "extract": str,
+                "expect": str,
+                "timeout": int,
+                "skip_if_unset": list,
+                "skip_unless": str,
+            },
+        )
         for req in ("id", "kind", "doc"):
             if req not in c:
                 raise ConfigError(f"{where}: missing required field {req!r}")
@@ -237,8 +288,7 @@ def load(root: Path) -> Config:
         if check.arg is not None:
             src = cfg.sources.get(check.source)
             if src is None or not src.command:
-                raise ConfigError(f"{where}: uses 'arg' but source {check.source!r} "
-                                  f"has no command template")
+                raise ConfigError(f"{where}: uses 'arg' but source {check.source!r} has no command template")
         cfg.checks.append(check)
 
     agent = _take(data.pop("agent", {}), "[agent]", {"claude": bool, "agents_md": bool})

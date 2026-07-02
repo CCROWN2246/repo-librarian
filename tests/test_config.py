@@ -39,8 +39,10 @@ class ConfigTests(RepoCase):
             self.cfg("[[verify.checks]]\nid='a'\nkind='track'\ndoc='d.md'\n")
 
     def test_check_duplicate_id(self):
-        toml = ("[[verify.checks]]\nid='a'\nkind='track'\ndoc='d.md'\ncmd='echo 1'\n"
-                "[[verify.checks]]\nid='a'\nkind='track'\ndoc='d.md'\ncmd='echo 2'\n")
+        toml = (
+            "[[verify.checks]]\nid='a'\nkind='track'\ndoc='d.md'\ncmd='echo 1'\n"
+            "[[verify.checks]]\nid='a'\nkind='track'\ndoc='d.md'\ncmd='echo 2'\n"
+        )
         with self.assertRaisesRegex(ConfigError, "duplicate"):
             self.cfg(toml)
 
@@ -51,7 +53,8 @@ class ConfigTests(RepoCase):
     def test_layer_alias_maps_to_source(self):
         cfg = self.cfg(
             "[verify.sources.raw-db]\ncommand = 'echo {arg}'\n"
-            "[[verify.checks]]\nid='a'\nkind='track'\ndoc='d.md'\narg='q'\nlayer='raw-db'\n")
+            "[[verify.checks]]\nid='a'\nkind='track'\ndoc='d.md'\narg='q'\nlayer='raw-db'\n"
+        )
         self.assertEqual(cfg.checks[0].source, "raw-db")
 
     def test_unsupported_schema_version(self):

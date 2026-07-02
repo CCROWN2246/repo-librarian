@@ -35,7 +35,8 @@ jobs:
           python -m pip install .
           cd examples/demo-repo
           librarian index
-          librarian status
+          # --hook always exits 0; plain `status` exits 1 on the demo's planted attention items
+          librarian status --hook
 
   lint:
     runs-on: ubuntu-latest

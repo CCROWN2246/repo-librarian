@@ -20,8 +20,15 @@ class BackfillTests(RepoCase):
         self.write("docs/naked.md", "# Naked\n\nbody\n")
         cfg = self.cfg()
         targets = backfill.plan(cfg)
-        backfill.apply(cfg, targets, domain="data", status="draft", authority="unverified",
-                       recheck="30d", today=config.today())
+        backfill.apply(
+            cfg,
+            targets,
+            domain="data",
+            status="draft",
+            authority="unverified",
+            recheck="30d",
+            today=config.today(),
+        )
         text = self.read("docs/naked.md")
         meta = frontmatter.parse(text).meta
         self.assertEqual(meta["id"], "docs-naked")
@@ -29,7 +36,7 @@ class BackfillTests(RepoCase):
         self.assertEqual(meta["authority"], "unverified")
         self.assertEqual(meta["last_verified"], self.TODAY)
         self.assertIn("body", text)
-        self.assertEqual(backfill.plan(cfg), [])   # second pass finds nothing
+        self.assertEqual(backfill.plan(cfg), [])  # second pass finds nothing
 
     def test_skip_files_respected(self):
         self.write("CLAUDE.md", "# instructions\n")

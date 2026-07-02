@@ -20,8 +20,19 @@ _ISO_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 # Canonical field order for serialize(); extras follow alphabetically.
 FIELD_ORDER = [
-    "id", "title", "domain", "kind", "status", "authority", "source_of_truth",
-    "last_verified", "recheck", "read_when", "owner", "tags", "has_disputed_claims",
+    "id",
+    "title",
+    "domain",
+    "kind",
+    "status",
+    "authority",
+    "source_of_truth",
+    "last_verified",
+    "recheck",
+    "read_when",
+    "owner",
+    "tags",
+    "has_disputed_claims",
 ]
 
 DATE_FIELDS = {"last_verified"}
@@ -131,8 +142,9 @@ def parse(text: str) -> ParseResult | None:
             continue
         indent, key, rawval = m.groups()
         if indent:
-            warnings.append(f"line {i + 1}: nested mapping under an indent is unsupported — "
-                            f"field {key!r} ignored")
+            warnings.append(
+                f"line {i + 1}: nested mapping under an indent is unsupported — field {key!r} ignored"
+            )
             continue
         val = _strip_comment(rawval).strip()
         if val.startswith("[") and val.endswith("]") and len(val) >= 2:

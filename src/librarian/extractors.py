@@ -77,7 +77,7 @@ def extract(spec: str, stdout: str, exit_code: int) -> str:
     if spec == "exit_code":
         return str(exit_code)
     if spec.startswith("regex:"):
-        pattern = spec[len("regex:"):]
+        pattern = spec[len("regex:") :]
         try:
             m = re.search(pattern, stdout, re.MULTILINE)
         except re.error as e:
@@ -86,11 +86,11 @@ def extract(spec: str, stdout: str, exit_code: int) -> str:
             return "<no-match>"
         return m.group(1) if m.groups() else m.group(0)
     if spec.startswith("json:"):
-        return _json_path(stdout, spec[len("json:"):])
+        return _json_path(stdout, spec[len("json:") :])
     if spec.startswith("column_present:"):
-        name = spec[len("column_present:"):]
+        name = spec[len("column_present:") :]
         return "present" if name in _colnames(stdout) else "absent"
     if spec.startswith("column_absent:"):
-        name = spec[len("column_absent:"):]
+        name = spec[len("column_absent:") :]
         return "absent" if name not in _colnames(stdout) else "present"
     raise ExtractError(f"unknown extractor {spec!r}")

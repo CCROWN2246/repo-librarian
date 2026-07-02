@@ -27,7 +27,7 @@ class InitReport:
     written: list[str] = field(default_factory=list)
     skipped: list[str] = field(default_factory=list)
     updated: list[str] = field(default_factory=list)
-    kept: list[str] = field(default_factory=list)      # user-modified, left alone
+    kept: list[str] = field(default_factory=list)  # user-modified, left alone
     removed: list[str] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
 
@@ -52,15 +52,23 @@ def _load_manifest(root: Path, index_dir: str) -> dict:
 
 def _save_manifest(root: Path, index_dir: str, manifest: dict) -> None:
     from . import __version__
+
     manifest["librarian_version"] = __version__
     out = root / index_dir
     out.mkdir(parents=True, exist_ok=True)
-    (out / MANIFEST).write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n",
-                                encoding="utf-8")
+    (out / MANIFEST).write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
-def _write_managed(root: Path, rel: str, content: str, manifest: dict, report: InitReport,
-                   *, upgrade: bool, executable: bool = False) -> None:
+def _write_managed(
+    root: Path,
+    rel: str,
+    content: str,
+    manifest: dict,
+    report: InitReport,
+    *,
+    upgrade: bool,
+    executable: bool = False,
+) -> None:
     path = root / rel
     recorded = manifest["files"].get(rel)
     if path.exists():
@@ -145,8 +153,10 @@ def _merge_claude_settings(root: Path, report: InitReport) -> None:
         try:
             settings = json.loads(path.read_text(encoding="utf-8"))
         except json.JSONDecodeError:
-            report.notes.append(".claude/settings.json is not valid JSON — hook NOT merged; "
-                                f"add a SessionStart hook running `{HOOK_COMMAND}` manually")
+            report.notes.append(
+                ".claude/settings.json is not valid JSON — hook NOT merged; "
+                f"add a SessionStart hook running `{HOOK_COMMAND}` manually"
+            )
             return
     hooks = settings.setdefault("hooks", {})
     session = hooks.setdefault("SessionStart", [])
@@ -161,39 +171,53 @@ def _merge_claude_settings(root: Path, report: InitReport) -> None:
     report.updated.append(".claude/settings.json (SessionStart hook merged)")
 
 
-def init(root: Path, *, agent: str = "both", index_dir: str = "_index",
-         upgrade: bool = False) -> InitReport:
+def init(root: Path, *, agent: str = "both", index_dir: str = "_index", upgrade: bool = False) -> InitReport:
     report = InitReport()
     manifest = _load_manifest(root, index_dir)
 
-    _write_managed(root, ".librarian.toml", _asset("librarian.toml.template"),
-                   manifest, report, upgrade=False)  # config is user policy: never auto-upgrade
+    _write_managed(
+        root, ".librarian.toml", _asset("librarian.toml.template"), manifest, report, upgrade=False
+    )  # config is user policy: never auto-upgrade
     from .registry import REGISTRY_TEMPLATE
-    _write_managed(root, "librarian-artifacts.toml", REGISTRY_TEMPLATE,
-                   manifest, report, upgrade=False)
-    _write_managed(root, "KNOWLEDGE_PROTOCOL.md", _asset("KNOWLEDGE_PROTOCOL.md"),
-                   manifest, report, upgrade=upgrade)
-    _write_managed(root, "docs/NAVIGATOR.md", _asset("NAVIGATOR.template.md"),
-                   manifest, report, upgrade=False)  # becomes user content immediately
-    _write_managed(root, "_inbox/README.md", _asset("inbox_README.md"),
-                   manifest, report, upgrade=upgrade)
-    _write_managed(root, "_archive/README.md", _asset("archive_README.md"),
-                   manifest, report, upgrade=upgrade)
+
+    _write_managed(root, "librarian-artifacts.toml", REGISTRY_TEMPLATE, manifest, report, upgrade=False)
+    _write_managed(
+        root, "KNOWLEDGE_PROTOCOL.md", _asset("KNOWLEDGE_PROTOCOL.md"), manifest, report, upgrade=upgrade
+    )
+    _write_managed(
+        root, "docs/NAVIGATOR.md", _asset("NAVIGATOR.template.md"), manifest, report, upgrade=False
+    )  # becomes user content immediately
+    _write_managed(root, "_inbox/README.md", _asset("inbox_README.md"), manifest, report, upgrade=upgrade)
+    _write_managed(root, "_archive/README.md", _asset("archive_README.md"), manifest, report, upgrade=upgrade)
     gitkeep = root / "_inbox" / ".gitkeep"
     if not gitkeep.exists():
         gitkeep.write_text("", encoding="utf-8")
-    _write_managed(root, ".githooks/pre-commit", _asset("githooks/pre-commit"),
-                   manifest, report, upgrade=upgrade, executable=True)
+    _write_managed(
+        root,
+        ".githooks/pre-commit",
+        _asset("githooks/pre-commit"),
+        manifest,
+        report,
+        upgrade=upgrade,
+        executable=True,
+    )
 
     if agent in ("agents-md", "both"):
         _apply_block(root, "AGENTS.md", _asset("AGENTS_BLOCK.md"), manifest, report)
     if agent in ("claude", "both"):
         _apply_block(root, "CLAUDE.md", _asset("CLAUDE_BLOCK.md"), manifest, report)
-        _write_managed(root, ".claude/commands/kb.md", _asset("claude/commands/kb.md"),
-                       manifest, report, upgrade=upgrade)
-        _write_managed(root, ".claude/hooks/librarian-session.sh",
-                       _asset("claude/librarian-session.sh"),
-                       manifest, report, upgrade=upgrade, executable=True)
+        _write_managed(
+            root, ".claude/commands/kb.md", _asset("claude/commands/kb.md"), manifest, report, upgrade=upgrade
+        )
+        _write_managed(
+            root,
+            ".claude/hooks/librarian-session.sh",
+            _asset("claude/librarian-session.sh"),
+            manifest,
+            report,
+            upgrade=upgrade,
+            executable=True,
+        )
         _merge_claude_settings(root, report)
 
     _save_manifest(root, index_dir, manifest)

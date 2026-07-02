@@ -34,11 +34,21 @@ class InitTests(ScaffoldCase):
 
     def test_init_writes_expected_set(self):
         scaffold.init(self.root, agent="both")
-        for rel in (".librarian.toml", "librarian-artifacts.toml", "KNOWLEDGE_PROTOCOL.md",
-                    "docs/NAVIGATOR.md", "_inbox/README.md", "_archive/README.md",
-                    ".githooks/pre-commit", "AGENTS.md", "CLAUDE.md",
-                    ".claude/commands/kb.md", ".claude/hooks/librarian-session.sh",
-                    ".claude/settings.json", "_index/.scaffold.json"):
+        for rel in (
+            ".librarian.toml",
+            "librarian-artifacts.toml",
+            "KNOWLEDGE_PROTOCOL.md",
+            "docs/NAVIGATOR.md",
+            "_inbox/README.md",
+            "_archive/README.md",
+            ".githooks/pre-commit",
+            "AGENTS.md",
+            "CLAUDE.md",
+            ".claude/commands/kb.md",
+            ".claude/hooks/librarian-session.sh",
+            ".claude/settings.json",
+            "_index/.scaffold.json",
+        ):
             self.assertTrue((self.root / rel).exists(), rel)
 
     def test_agent_none_skips_glue(self):
@@ -52,7 +62,7 @@ class InitTests(ScaffoldCase):
         text = (self.root / "AGENTS.md").read_text(encoding="utf-8")
         self.assertIn("Do not touch.", text)
         self.assertIn(scaffold.MARKER_BEGIN, text)
-        scaffold.init(self.root, agent="agents-md")   # still exactly one block
+        scaffold.init(self.root, agent="agents-md")  # still exactly one block
         text2 = (self.root / "AGENTS.md").read_text(encoding="utf-8")
         self.assertEqual(text2.count(scaffold.MARKER_BEGIN), 1)
         self.assertEqual(text, text2)
@@ -60,17 +70,26 @@ class InitTests(ScaffoldCase):
     def test_settings_merge_preserves_user_keys(self):
         claude = self.root / ".claude"
         claude.mkdir()
-        (claude / "settings.json").write_text(json.dumps({
-            "permissions": {"allow": ["Bash(ls:*)"]},
-            "hooks": {"PostToolUse": [{"matcher": "Edit", "hooks": [
-                {"type": "command", "command": "bash mine.sh"}]}]},
-        }), encoding="utf-8")
+        (claude / "settings.json").write_text(
+            json.dumps(
+                {
+                    "permissions": {"allow": ["Bash(ls:*)"]},
+                    "hooks": {
+                        "PostToolUse": [
+                            {"matcher": "Edit", "hooks": [{"type": "command", "command": "bash mine.sh"}]}
+                        ]
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
         scaffold.init(self.root, agent="claude")
         settings = json.loads((claude / "settings.json").read_text(encoding="utf-8"))
         self.assertEqual(settings["permissions"]["allow"], ["Bash(ls:*)"])
         self.assertEqual(settings["hooks"]["PostToolUse"][0]["hooks"][0]["command"], "bash mine.sh")
-        self.assertTrue(any(scaffold.HOOK_COMMAND in json.dumps(e)
-                            for e in settings["hooks"]["SessionStart"]))
+        self.assertTrue(
+            any(scaffold.HOOK_COMMAND in json.dumps(e) for e in settings["hooks"]["SessionStart"])
+        )
 
     def test_init_never_overwrites_modified_config(self):
         scaffold.init(self.root)
@@ -97,9 +116,9 @@ class UpgradeTests(ScaffoldCase):
         manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
 
         report = scaffold.init(self.root, agent="both", upgrade=True)
-        self.assertIn("KNOWLEDGE_PROTOCOL.md", report.kept)          # user-modified: untouched
+        self.assertIn("KNOWLEDGE_PROTOCOL.md", report.kept)  # user-modified: untouched
         self.assertEqual(protocol.read_text(encoding="utf-8"), "MY EDITED PROTOCOL\n")
-        self.assertIn(".githooks/pre-commit", report.updated)        # ours: refreshed
+        self.assertIn(".githooks/pre-commit", report.updated)  # ours: refreshed
         self.assertNotIn("old version", hook.read_text(encoding="utf-8"))
 
 

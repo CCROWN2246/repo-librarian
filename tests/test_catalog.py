@@ -44,37 +44,41 @@ class CatalogTests(RepoCase):
     def test_conflict_marker_open_vs_ack(self):
         body = make_doc(last_verified="2026-07-01") + (
             "\nclaim one <!-- KB-CONTRADICTED: conflicts with [verified: x] -->\n"
-            "claim two <!-- KB-CONTRADICTED: KB-ACK conflicts with [verified: y] -->\n")
+            "claim two <!-- KB-CONTRADICTED: KB-ACK conflicts with [verified: y] -->\n"
+        )
         self.write("docs/a.md", body)
         _, res = self.build()
         self.assertEqual(len(res.conflicts), 1)
         self.assertEqual(len(res.conflicts_ack), 1)
 
     def test_prose_describing_marker_not_flagged(self):
-        body = make_doc(last_verified="2026-07-01") + \
-            "\nUse a `KB-CONTRADICTED` marker to quarantine a line.\n"
+        body = (
+            make_doc(last_verified="2026-07-01") + "\nUse a `KB-CONTRADICTED` marker to quarantine a line.\n"
+        )
         self.write("docs/a.md", body)
         _, res = self.build()
         self.assertEqual(res.conflicts, [])
 
     def test_disputed_claims_flagged(self):
-        doc = make_doc(last_verified="2026-07-01").replace(
-            "tags: []", "tags: []\nhas_disputed_claims: true")
+        doc = make_doc(last_verified="2026-07-01").replace("tags: []", "tags: []\nhas_disputed_claims: true")
         self.write("docs/a.md", doc)
         _, res = self.build()
         self.assertTrue(any("disputed" in why for _, _, why in res.stale))
 
     def test_unverified_tier_listed(self):
         doc = make_doc(last_verified="2026-07-01").replace(
-            "status: authoritative", "status: reference\nauthority: unverified")
+            "status: authoritative", "status: reference\nauthority: unverified"
+        )
         self.write("docs/t.md", doc)
         _, res = self.build()
         self.assertEqual(len(res.unverified), 1)
 
     def test_orphan_artifact(self):
-        self.write("librarian-artifacts.toml",
-                   '[[artifact]]\npath = "gone.sql"\nid = "gone"\ntitle = "G"\n'
-                   'domain = "data"\nkind = "sql"\nstatus = "reference"\n')
+        self.write(
+            "librarian-artifacts.toml",
+            '[[artifact]]\npath = "gone.sql"\nid = "gone"\ntitle = "G"\n'
+            'domain = "data"\nkind = "sql"\nstatus = "reference"\n',
+        )
         _, res = self.build()
         self.assertEqual(res.orphans, [("gone", "gone.sql")])
         self.assertFalse(any(d.get("id") == "gone" for d in res.items))
@@ -104,18 +108,22 @@ class CatalogTests(RepoCase):
         self.assertEqual(res.inbox_pending, ["raw-dump.md"])
 
     def test_absence_guard(self):
-        body = make_doc(last_verified="2026-07-01") + \
-            "\nThe rates source is not yet identified.\nWe don't have HPPD targets.\n"
+        body = (
+            make_doc(last_verified="2026-07-01")
+            + "\nThe rates source is not yet identified.\nWe don't have HPPD targets.\n"
+        )
         self.write("docs/a.md", body)
         _, res = self.build()
         self.assertEqual(len(res.absence_claims), 2)
 
     def test_absence_guard_suppressed_lines_and_off_switch(self):
-        body = make_doc(last_verified="2026-07-01") + \
-            "\nTBD <!-- KB-CONTRADICTED: conflicts with [verified: z] -->\n"
+        body = (
+            make_doc(last_verified="2026-07-01")
+            + "\nTBD <!-- KB-CONTRADICTED: conflicts with [verified: z] -->\n"
+        )
         self.write("docs/a.md", body)
         _, res = self.build()
-        self.assertEqual(res.absence_claims, [])   # marker line suppressed
+        self.assertEqual(res.absence_claims, [])  # marker line suppressed
         self.write("docs/b.md", make_doc(id="b", last_verified="2026-07-01") + "\nTBD later\n")
         _, res = self.build("[index]\nabsence_guard = false\n")
         self.assertEqual(res.absence_claims, [])
@@ -145,12 +153,19 @@ class CatalogTests(RepoCase):
         self.write("docs/a.md", make_doc(last_verified="2026-07-01"))
         cfg, res = self.build()
         line3 = render.staleness_md(cfg, res).splitlines()[2]
-        for token in ("awaiting intake", "flagged", "orphaned", "OPEN conflicts",
-                      "md need frontmatter", "code/data unregistered"):
+        for token in (
+            "awaiting intake",
+            "flagged",
+            "orphaned",
+            "OPEN conflicts",
+            "md need frontmatter",
+            "code/data unregistered",
+        ):
             self.assertIn(token, line3)
 
     def test_catalog_json_shape(self):
         import json
+
         self.write("docs/a.md", make_doc(last_verified="2026-07-01"))
         cfg, res = self.build()
         data = json.loads(render.catalog_json(res))
@@ -160,8 +175,11 @@ class CatalogTests(RepoCase):
         self.assertIn("open_conflicts", data["flags"])
 
     def test_fm_warnings_surface(self):
-        self.write("docs/a.md", "---\nid: a\ntitle: T\ndomain: d\nstatus: reference\n"
-                                "last_verified: 2026-07-01\nnested:\n  x: 1\n---\nbody\n")
+        self.write(
+            "docs/a.md",
+            "---\nid: a\ntitle: T\ndomain: d\nstatus: reference\n"
+            "last_verified: 2026-07-01\nnested:\n  x: 1\n---\nbody\n",
+        )
         cfg, res = self.build()
         self.assertTrue(res.fm_warnings)
         self.assertIn("Frontmatter warnings", render.staleness_md(cfg, res))

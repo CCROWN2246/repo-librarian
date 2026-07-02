@@ -5,13 +5,11 @@ import unittest
 from helpers import RepoCase, make_doc
 from librarian import config, verify
 
-
 POSIX_SH = os.name != "nt" and os.path.exists("/bin/sh")
 
 
 def check_toml(id, kind, cmd, *, expect=None, doc="docs/a.md", extra=""):
-    lines = ["[[verify.checks]]", f"id = '{id}'", f"kind = '{kind}'", f"doc = '{doc}'",
-             f'cmd = "{cmd}"']
+    lines = ["[[verify.checks]]", f"id = '{id}'", f"kind = '{kind}'", f"doc = '{doc}'", f'cmd = "{cmd}"']
     if expect is not None:
         lines.append(f"expect = '{expect}'")
     if extra:
@@ -22,8 +20,10 @@ def check_toml(id, kind, cmd, *, expect=None, doc="docs/a.md", extra=""):
 @unittest.skipUnless(POSIX_SH, "verify shells out via /bin/sh (POSIX only)")
 class VerifyTests(RepoCase):
     def test_assert_pass_and_drift(self):
-        cfg = self.cfg(check_toml("good", "assert", "echo 17", expect="17") +
-                       check_toml("bad", "assert", "echo 18", expect="17"))
+        cfg = self.cfg(
+            check_toml("good", "assert", "echo 17", expect="17")
+            + check_toml("bad", "assert", "echo 18", expect="17")
+        )
         run = verify.run(cfg)
         by_id = {r.id: r for r in run.results}
         self.assertEqual(by_id["good"].status, "PASS")
@@ -42,7 +42,7 @@ class VerifyTests(RepoCase):
         run3 = verify.run(cfg)
         self.assertEqual(run3.results[0].status, "CHANGED")
         self.assertEqual(run3.results[0].baseline, "41")
-        self.assertFalse(run3.failed)   # track never fails the run
+        self.assertFalse(run3.failed)  # track never fails the run
 
     def test_error_on_nonzero_exit(self):
         cfg = self.cfg(check_toml("boom", "assert", "exit 5", expect="x"))
@@ -57,8 +57,15 @@ class VerifyTests(RepoCase):
         self.assertFalse(run.failed)
 
     def test_skip_if_unset(self):
-        cfg = self.cfg(check_toml("dbcheck", "assert", "echo hi", expect="hi",
-                                  extra="skip_if_unset = ['LIBRARIAN_TEST_NOT_SET_VAR']"))
+        cfg = self.cfg(
+            check_toml(
+                "dbcheck",
+                "assert",
+                "echo hi",
+                expect="hi",
+                extra="skip_if_unset = ['LIBRARIAN_TEST_NOT_SET_VAR']",
+            )
+        )
         os.environ.pop("LIBRARIAN_TEST_NOT_SET_VAR", None)
         run = verify.run(cfg)
         self.assertEqual(run.results[0].status, "SKIP")
@@ -71,26 +78,28 @@ class VerifyTests(RepoCase):
         marker = self.root / "probe_ran"
         toml = (
             f"[verify.sources.db]\n"
-            f"command = \"echo prefix {{arg}}\"\n"
-            f"skip_unless = \"touch {marker.as_posix()}.$$ && test -e {marker.as_posix()}.enable\"\n"
+            f'command = "echo prefix {{arg}}"\n'
+            f'skip_unless = "touch {marker.as_posix()}.$$ && test -e {marker.as_posix()}.enable"\n'
             "[[verify.checks]]\nid = 'q1'\nkind = 'assert'\ndoc = 'd.md'\n"
             "arg = 'hello world'\nsource = 'db'\nextract = \"regex:prefix (.*)\"\nexpect = 'hello world'\n"
             "[[verify.checks]]\nid = 'q2'\nkind = 'assert'\ndoc = 'd.md'\n"
-            "arg = 'x'\nsource = 'db'\nexpect = 'x'\n")
+            "arg = 'x'\nsource = 'db'\nexpect = 'x'\n"
+        )
         cfg = self.cfg(toml)
         run = verify.run(cfg)
-        self.assertEqual({r.status for r in run.results}, {"SKIP"})     # probe fails
+        self.assertEqual({r.status for r in run.results}, {"SKIP"})  # probe fails
         probes = [p for p in self.root.iterdir() if p.name.startswith("probe_ran")]
         self.assertEqual(len(probes), 1, "probe must be cached — one execution for two checks")
         (self.root / "probe_ran.enable").write_text("")
         run = verify.run(cfg)
         by_id = {r.id: r for r in run.results}
-        self.assertEqual(by_id["q1"].status, "PASS")   # {arg} shell-quoted through the template
+        self.assertEqual(by_id["q1"].status, "PASS")  # {arg} shell-quoted through the template
         self.assertEqual(by_id["q1"].live, "hello world")
 
     def test_filters(self):
-        cfg = self.cfg(check_toml("a_one", "assert", "echo 1", expect="1") +
-                       check_toml("b_two", "track", "echo 2"))
+        cfg = self.cfg(
+            check_toml("a_one", "assert", "echo 1", expect="1") + check_toml("b_two", "track", "echo 2")
+        )
         self.assertEqual([r.id for r in verify.run(cfg, only_id="a_*").results], ["a_one"])
         self.assertEqual([r.id for r in verify.run(cfg, only_kind="track").results], ["b_two"])
 
@@ -106,17 +115,18 @@ class VerifyTests(RepoCase):
     def test_stamp_docs_only_on_all_pass(self):
         self.write("docs/a.md", make_doc(last_verified="2026-01-01"))
         self.write("docs/b.md", make_doc(id="doc-b", last_verified="2026-01-01"))
-        cfg = self.cfg(check_toml("ok1", "assert", "echo 1", expect="1", doc="docs/a.md") +
-                       check_toml("skp", "assert", "exit 3", expect="1", doc="docs/a.md") +
-                       check_toml("bad", "assert", "echo 2", expect="1", doc="docs/b.md"))
+        cfg = self.cfg(
+            check_toml("ok1", "assert", "echo 1", expect="1", doc="docs/a.md")
+            + check_toml("skp", "assert", "exit 3", expect="1", doc="docs/a.md")
+            + check_toml("bad", "assert", "echo 2", expect="1", doc="docs/b.md")
+        )
         actions = verify.stamp_docs(cfg, verify.run(cfg), config.today())
-        self.assertIn("last_verified: 2026-07-02", self.read("docs/a.md"))   # SKIP doesn't block
-        self.assertIn("last_verified: 2026-01-01", self.read("docs/b.md"))   # DRIFT blocks
+        self.assertIn("last_verified: 2026-07-02", self.read("docs/a.md"))  # SKIP doesn't block
+        self.assertIn("last_verified: 2026-01-01", self.read("docs/b.md"))  # DRIFT blocks
         self.assertTrue(any("stamped docs/a.md" in a for a in actions))
 
     def test_stamp_docs_prose_pointer_unstampable(self):
-        cfg = self.cfg(check_toml("ok", "assert", "echo 1", expect="1",
-                                  doc="see docs/a.md section 3"))
+        cfg = self.cfg(check_toml("ok", "assert", "echo 1", expect="1", doc="see docs/a.md section 3"))
         actions = verify.stamp_docs(cfg, verify.run(cfg), config.today())
         self.assertTrue(any("cannot stamp" in a for a in actions))
 
