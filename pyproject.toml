@@ -26,8 +26,8 @@ classifiers = [
 dependencies = []
 
 [project.urls]
-Homepage = "https://github.com/chris-dropstat/repo-librarian"
-Changelog = "https://github.com/chris-dropstat/repo-librarian/blob/main/CHANGELOG.md"
+Homepage = "https://github.com/CCROWN2246/repo-librarian"
+Changelog = "https://github.com/CCROWN2246/repo-librarian/blob/main/CHANGELOG.md"
 
 [project.scripts]
 librarian = "librarian.cli:main"

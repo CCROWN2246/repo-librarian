@@ -5,7 +5,7 @@ Thanks for helping make repo-librarian better.
 ## Dev setup
 
 ```console
-$ git clone https://github.com/chris-dropstat/repo-librarian && cd repo-librarian
+$ git clone https://github.com/CCROWN2246/repo-librarian && cd repo-librarian
 $ python3 -m unittest discover -s tests        # zero deps — this just works
 ```
 

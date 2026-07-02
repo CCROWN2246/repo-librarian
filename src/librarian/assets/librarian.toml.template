@@ -1,5 +1,5 @@
 # .librarian.toml — repo-librarian configuration
-# Docs: https://github.com/chris-dropstat/repo-librarian
+# Docs: https://github.com/CCROWN2246/repo-librarian
 # Every key shown commented has the default value; uncomment to change it.
 schema_version = 1
 
