@@ -1,5 +1,7 @@
 # repo-librarian
 
+[![ci](https://github.com/CCROWN2246/repo-librarian/actions/workflows/ci.yml/badge.svg)](https://github.com/CCROWN2246/repo-librarian/actions/workflows/ci.yml)
+
 > A card catalog and a fact-checker for your repo's knowledge — so your coding agent
 > reads 2 docs instead of 200, and never asserts a stale number.
 
