@@ -7,8 +7,11 @@ from helpers import RepoCase, make_doc
 from librarian import config, verify
 
 
+POSIX_SH = os.name != "nt" and os.path.exists("/bin/sh")
+
+
 def check_toml(id, kind, cmd, *, expect=None, doc="docs/a.md", extra=""):
-    lines = [f"[[verify.checks]]", f"id = '{id}'", f"kind = '{kind}'", f"doc = '{doc}'",
+    lines = ["[[verify.checks]]", f"id = '{id}'", f"kind = '{kind}'", f"doc = '{doc}'",
              f'cmd = "{cmd}"']
     if expect is not None:
         lines.append(f"expect = '{expect}'")
@@ -17,6 +20,7 @@ def check_toml(id, kind, cmd, *, expect=None, doc="docs/a.md", extra=""):
     return "\n".join(lines) + "\n"
 
 
+@unittest.skipUnless(POSIX_SH, "verify shells out via /bin/sh (POSIX only)")
 class VerifyTests(RepoCase):
     def test_assert_pass_and_drift(self):
         cfg = self.cfg(check_toml("good", "assert", "echo 17", expect="17") +

@@ -253,7 +253,7 @@ def cmd_status(args, rep: Reporter) -> int:
             f"({s['docs']} docs + {s['artifacts']} artifacts, {s['domains']} domains)")
     rep.say(f"  flagged: {s['flagged']} · unregistered code/data: {s['unregistered']} · "
             f"absence-claims: {s['absence_claims']}")
-    rep.say(f"  facts last verified: " + (f"{age}d ago" if age is not None else "never") +
+    rep.say("  facts last verified: " + (f"{age}d ago" if age is not None else "never") +
             (f" · {len(cfg.checks)} checks configured" if cfg.checks else " · no checks configured"))
     if attention:
         rep.say("  needs attention: " + " · ".join(attention))

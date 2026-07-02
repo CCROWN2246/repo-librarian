@@ -1,0 +1,4 @@
+# LF everywhere: the scaffolded bash hooks (and golden-file byte comparisons) break under CRLF.
+* text=auto eol=lf
+*.png binary
+*.gif binary

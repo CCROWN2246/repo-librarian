@@ -1,6 +1,7 @@
 import contextlib
 import io
 import json
+import os
 import unittest
 
 from helpers import RepoCase, make_doc
@@ -47,6 +48,7 @@ class CliTests(CliCase):
         data = json.loads(out)
         self.assertEqual(data["summary"]["docs"], 1)
 
+    @unittest.skipUnless(os.name != "nt", "verify shells out via /bin/sh (POSIX only)")
     def test_verify_drift_exit1(self):
         self.write(".librarian.toml",
                    "schema_version = 1\n[[verify.checks]]\nid='x'\nkind='assert'\n"
@@ -56,6 +58,7 @@ class CliTests(CliCase):
         self.assertIn("DRIFT", out)
         self.assertIn("-> update: d.md", out)
 
+    @unittest.skipUnless(os.name != "nt", "verify shells out via /bin/sh (POSIX only)")
     def test_verify_json(self):
         self.write(".librarian.toml",
                    "schema_version = 1\n[[verify.checks]]\nid='x'\nkind='assert'\n"
