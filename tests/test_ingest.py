@@ -1,7 +1,6 @@
 import unittest
 
 from helpers import RepoCase, make_doc
-
 from librarian import config, frontmatter, ingest
 
 

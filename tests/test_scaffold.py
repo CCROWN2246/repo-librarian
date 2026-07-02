@@ -5,7 +5,6 @@ import unittest
 from pathlib import Path
 
 from helpers import SRC  # noqa: F401
-
 from librarian import scaffold
 
 
@@ -90,9 +89,11 @@ class UpgradeTests(ScaffoldCase):
         # simulate an older scaffolded hook that the manifest still owns
         manifest_path = self.root / "_index" / ".scaffold.json"
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        hook.write_text("#!/bin/sh\nold version\n", encoding="utf-8")
-        manifest["files"][".githooks/pre-commit"] = hashlib.sha256(
-            hook.read_bytes()).hexdigest()
+        old_hook = "#!/bin/sh\nold version\n"
+        hook.write_text(old_hook, encoding="utf-8", newline="\n")
+        # hash the STRING (what the engine compares after text-mode read), not raw
+        # disk bytes — on Windows those differ by CRLF translation
+        manifest["files"][".githooks/pre-commit"] = scaffold._sha(old_hook)
         manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
 
         report = scaffold.init(self.root, agent="both", upgrade=True)

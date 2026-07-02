@@ -131,7 +131,8 @@ def parse(text: str) -> ParseResult | None:
             continue
         indent, key, rawval = m.groups()
         if indent:
-            warnings.append(f"line {i + 1}: nested mapping under an indent is unsupported — field {key!r} ignored")
+            warnings.append(f"line {i + 1}: nested mapping under an indent is unsupported — "
+                            f"field {key!r} ignored")
             continue
         val = _strip_comment(rawval).strip()
         if val.startswith("[") and val.endswith("]") and len(val) >= 2:

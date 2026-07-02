@@ -8,7 +8,6 @@ import unittest
 from pathlib import Path
 
 from helpers import SRC  # noqa: F401
-
 from librarian import scaffold
 
 BASH = shutil.which("bash")

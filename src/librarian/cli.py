@@ -302,7 +302,7 @@ def cmd_search(args, rep: Reporter) -> int:
     if not top:
         rep.say("no matches — try `librarian index` to refresh, or grep")
         return 1
-    for s, e in top:
+    for _score, e in top:
         rw = ", ".join(str(x) for x in e.get("read_when", [])) or "-"
         rep.say(f"  {e.get('id', '?'):32} {e['path']:44} read_when: {rw}")
     return 0

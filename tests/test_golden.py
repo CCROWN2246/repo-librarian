@@ -14,7 +14,6 @@ import unittest
 from pathlib import Path
 
 from helpers import SRC  # noqa: F401
-
 from librarian import catalog, config, registry, render
 
 REPO = Path(__file__).resolve().parent.parent

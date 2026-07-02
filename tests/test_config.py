@@ -2,7 +2,6 @@ import os
 import unittest
 
 from helpers import RepoCase
-
 from librarian import config
 from librarian.config import ConfigError
 

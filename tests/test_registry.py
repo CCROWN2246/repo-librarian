@@ -1,7 +1,6 @@
 import unittest
 
 from helpers import RepoCase
-
 from librarian import registry
 
 VALID = """

@@ -61,7 +61,7 @@ class RepoCase(unittest.TestCase):
     def read(self, rel: str) -> str:
         return (self.root / rel).read_text(encoding="utf-8")
 
-    def cfg(self, extra_toml: str = "") -> "config.Config":
+    def cfg(self, extra_toml: str = "") -> config.Config:
         if extra_toml:
             existing = self.read(".librarian.toml")
             self.write(".librarian.toml", existing + extra_toml)

@@ -1,7 +1,6 @@
 import unittest
 
 from helpers import SRC  # noqa: F401
-
 from librarian.extractors import ExtractError, extract
 
 
