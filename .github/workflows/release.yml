@@ -18,8 +18,11 @@ jobs:
           python-version: "3.12"
       - run: python -m unittest discover -s tests
       - run: python -m pip install build && python -m build
-      - uses: pypa/gh-action-pypi-publish@release/v1
       - uses: softprops/action-gh-release@v2
         with:
           files: dist/*
           generate_release_notes: true
+      # PyPI publish is opt-in: set the repository variable PYPI_PUBLISH=true once
+      # trusted publishing is configured at pypi.org (project: repo-librarian).
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        if: vars.PYPI_PUBLISH == 'true'
