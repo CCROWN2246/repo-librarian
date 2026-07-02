@@ -1,0 +1,55 @@
+# Non-markdown knowledge artifacts — they can't hold frontmatter, so they're registered here.
+
+[[artifact]]
+path = "db/seed.sql"
+id = "seed-sql"
+title = "Demo database seed (stations + rides)"
+domain = "data"
+kind = "sql"
+status = "authoritative"
+last_verified = "2026-06-28"
+read_when = ["what data exists", "reseed the demo db"]
+tags = ["schema"]
+desc = "The source of truth the verify checks ground against."
+
+[[artifact]]
+path = "db/query.py"
+id = "query-runner"
+title = "Demo query runner (sqlite :memory:)"
+domain = "data"
+kind = "script"
+status = "authoritative"
+last_verified = "2026-06-28"
+read_when = ["run a query against the demo db", "how verify checks execute"]
+
+[[artifact]]
+path = "sql/monthly_rides.sql"
+id = "monthly-rides-sql"
+title = "Monthly rides per station rollup"
+domain = "data"
+kind = "sql"
+status = "authoritative"
+last_verified = "2026-06-28"
+read_when = ["compute monthly rides", "trace a ride number"]
+
+[[artifact]]
+path = "data/stations.csv"
+id = "stations-csv"
+title = "Stations export (CSV)"
+domain = "data"
+kind = "csv"
+status = "reference"
+last_verified = "2026-06-28"
+read_when = ["quick station lookup without the db"]
+source_of_truth = "db/seed.sql"
+desc = "An EXPORT — regenerate from seed.sql rather than editing."
+
+[[artifact]]
+path = "notebooks/utilization.ipynb"
+id = "utilization-notebook"
+title = "Station utilization exploration"
+domain = "data"
+kind = "notebook"
+status = "reference"
+last_verified = "2026-06-25"
+read_when = ["utilization analysis", "rides per dock"]

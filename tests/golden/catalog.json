@@ -1,0 +1,234 @@
+{
+  "entries": [
+    {
+      "authority": "curated",
+      "domain": "reference",
+      "id": "demo-readme",
+      "kind": "doc",
+      "last_verified": "2026-06-28",
+      "owner": "demo",
+      "path": "README.md",
+      "read_when": [
+        "how to run the demo",
+        "demo tour"
+      ],
+      "recheck": "365d",
+      "status": "authoritative",
+      "tags": [
+        "demo"
+      ],
+      "title": "Citybikes demo \u2014 how to drive it"
+    },
+    {
+      "desc": "An EXPORT \u2014 regenerate from seed.sql rather than editing.",
+      "domain": "data",
+      "id": "stations-csv",
+      "kind": "csv",
+      "last_verified": "2026-06-28",
+      "path": "data/stations.csv",
+      "read_when": [
+        "quick station lookup without the db"
+      ],
+      "source_of_truth": "db/seed.sql",
+      "status": "reference",
+      "title": "Stations export (CSV)"
+    },
+    {
+      "domain": "data",
+      "id": "query-runner",
+      "kind": "script",
+      "last_verified": "2026-06-28",
+      "path": "db/query.py",
+      "read_when": [
+        "run a query against the demo db",
+        "how verify checks execute"
+      ],
+      "status": "authoritative",
+      "title": "Demo query runner (sqlite :memory:)"
+    },
+    {
+      "desc": "The source of truth the verify checks ground against.",
+      "domain": "data",
+      "id": "seed-sql",
+      "kind": "sql",
+      "last_verified": "2026-06-28",
+      "path": "db/seed.sql",
+      "read_when": [
+        "what data exists",
+        "reseed the demo db"
+      ],
+      "status": "authoritative",
+      "tags": [
+        "schema"
+      ],
+      "title": "Demo database seed (stations + rides)"
+    },
+    {
+      "authority": "curated",
+      "domain": "data",
+      "id": "etl-notes",
+      "kind": "doc",
+      "last_verified": "2026-06-25",
+      "owner": "demo",
+      "path": "docs/etl-notes.md",
+      "read_when": [
+        "touch the etl",
+        "why rides lag",
+        "export cadence"
+      ],
+      "recheck": "30d",
+      "status": "provisional",
+      "tags": [
+        "etl"
+      ],
+      "title": "ETL notes \u2014 ride export pipeline"
+    },
+    {
+      "authority": "curated",
+      "domain": "operations",
+      "id": "overview",
+      "kind": "doc",
+      "last_verified": "2026-06-20",
+      "owner": "demo",
+      "path": "docs/overview.md",
+      "read_when": [
+        "what is citybikes",
+        "project orientation",
+        "onboarding"
+      ],
+      "recheck": "90d",
+      "status": "authoritative",
+      "tags": [
+        "overview"
+      ],
+      "title": "Citybikes \u2014 project overview"
+    },
+    {
+      "authority": "verified",
+      "domain": "data",
+      "id": "schema",
+      "kind": "doc",
+      "last_verified": "2026-06-28",
+      "owner": "demo",
+      "path": "docs/schema.md",
+      "read_when": [
+        "write a query",
+        "check a column",
+        "table shapes"
+      ],
+      "recheck": "30d",
+      "status": "authoritative",
+      "tags": [
+        "schema",
+        "sql"
+      ],
+      "title": "Database schema notes"
+    },
+    {
+      "domain": "data",
+      "id": "utilization-notebook",
+      "kind": "notebook",
+      "last_verified": "2026-06-25",
+      "path": "notebooks/utilization.ipynb",
+      "read_when": [
+        "utilization analysis",
+        "rides per dock"
+      ],
+      "status": "reference",
+      "title": "Station utilization exploration"
+    },
+    {
+      "domain": "data",
+      "id": "monthly-rides-sql",
+      "kind": "sql",
+      "last_verified": "2026-06-28",
+      "path": "sql/monthly_rides.sql",
+      "read_when": [
+        "compute monthly rides",
+        "trace a ride number"
+      ],
+      "status": "authoritative",
+      "title": "Monthly rides per station rollup"
+    },
+    {
+      "authority": "unverified",
+      "domain": "reference",
+      "has_disputed_claims": true,
+      "id": "ops-interview",
+      "kind": "doc",
+      "last_verified": "2026-06-10",
+      "owner": "demo",
+      "path": "transcripts/ops-interview.md",
+      "read_when": [
+        "why decisions were made",
+        "ops history",
+        "tribal knowledge"
+      ],
+      "recheck": "365d",
+      "status": "reference",
+      "tags": [
+        "transcript",
+        "interview"
+      ],
+      "title": "Ops team interview (raw transcript)"
+    }
+  ],
+  "flags": {
+    "absence_claims": [],
+    "acknowledged_conflicts": [
+      {
+        "line": 20,
+        "path": "transcripts/ops-interview.md",
+        "text": "\"We run about a dozen stations right now.\" <!-- KB-CONTRADICTED: KB-ACK conflicts with [verified: 17 active stations, check active_station_c"
+      }
+    ],
+    "frontmatter_warnings": [],
+    "inbox_pending": [
+      "vendor-email.md"
+    ],
+    "missing_frontmatter": [],
+    "open_conflicts": [
+      {
+        "line": 22,
+        "path": "transcripts/ops-interview.md",
+        "text": "\"Each station has a region code so we can roll numbers up by area.\" <!-- KB-CONTRADICTED: conflicts with [verified: stations has no region c"
+      }
+    ],
+    "orphans": [],
+    "registry_errors": [],
+    "stale": [
+      {
+        "id": "etl-notes",
+        "path": "docs/etl-notes.md",
+        "why": "status=provisional"
+      },
+      {
+        "id": "ops-interview",
+        "path": "transcripts/ops-interview.md",
+        "why": "has disputed claims"
+      }
+    ],
+    "uncovered": [],
+    "unverified_sources": [
+      "transcripts/ops-interview.md"
+    ]
+  },
+  "schema_version": 1,
+  "summary": {
+    "absence_claims": 0,
+    "acknowledged_conflicts": 1,
+    "artifacts": 5,
+    "catalogued": 10,
+    "docs": 5,
+    "domains": 3,
+    "flagged": 2,
+    "frontmatter_warnings": 0,
+    "inbox_pending": 1,
+    "missing_frontmatter": 0,
+    "open_conflicts": 1,
+    "orphans": 0,
+    "registry_errors": 0,
+    "unregistered": 0,
+    "unverified_sources": 1
+  }
+}

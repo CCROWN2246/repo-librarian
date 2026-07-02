@@ -1,0 +1,54 @@
+# citybikes — the repo-librarian demo corpus.
+# Everything here runs offline: verify checks query an in-memory sqlite db via db/query.py.
+schema_version = 1
+
+[taxonomy]
+domains = ["operations", "data", "reference"]
+
+[verify]
+default_timeout = 30
+
+[verify.sources.demo-db]
+command = "python3 db/query.py {arg}"
+
+# --- stable schema facts docs/schema.md asserts ---
+[[verify.checks]]
+id      = "stations_no_region_column"
+kind    = "assert"
+doc     = "docs/schema.md"
+source  = "demo-db"
+arg     = "SELECT count(*) FROM pragma_table_info('stations') WHERE name='region'"
+extract = "scalar"
+expect  = "0"
+
+[[verify.checks]]
+id      = "active_station_count"
+kind    = "assert"
+doc     = "docs/schema.md"
+source  = "demo-db"
+arg     = "SELECT count(*) FROM stations WHERE active = 1"
+extract = "scalar"
+expect  = "17"
+
+# docs/schema.md claims every station has 20 docks — the seed disagrees (Old Mill
+# Yard has 15). This check is DELIBERATELY drifting: it's the README demo of a
+# doc fact caught red-handed. Fix the doc, not the check.
+[[verify.checks]]
+id      = "min_dock_count_is_20"
+kind    = "assert"
+doc     = "docs/schema.md"
+source  = "demo-db"
+arg     = "SELECT min(dock_count) FROM stations"
+extract = "scalar"
+expect  = "20"
+
+# --- values that legitimately move (track, never fails the run) ---
+[[verify.checks]]
+id      = "total_rides"
+kind    = "track"
+doc     = "docs/overview.md"
+source  = "demo-db"
+arg     = "SELECT count(*) FROM rides"
+extract = "scalar"
+# baseline lives in _index/baselines.json — deliberately stale there, so
+# `librarian verify` shows one CHANGED alongside the DRIFT.

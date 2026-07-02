@@ -1,0 +1,31 @@
+# Weekly knowledge-base sweep — copy into your repo's .github/workflows/.
+#
+# Runs `librarian verify` on a schedule so doc drift becomes a red run, not a wrong
+# number in a deliverable. HONEST CAVEAT: verify can only check sources the runner
+# can reach. If your checks need private DB credentials or a VPN/tunnel, run the
+# sweep where those live (a laptop cron, an internal runner) instead:
+#     0 9 * * 1  cd <repo> && librarian verify >> _index/.sweep.log 2>&1
+name: librarian-sweep
+
+on:
+  schedule:
+    - cron: "0 9 * * 1"   # Mondays 09:00 UTC
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install repo-librarian
+      # Export the secrets your [verify.sources.*] need; checks whose env is
+      # missing SKIP cleanly rather than failing the sweep.
+      - name: Verify doc facts against live sources
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: librarian verify
+      - name: Catalog gate (optional — honors [index].fail_on)
+        run: librarian index --check
