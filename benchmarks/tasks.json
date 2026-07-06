@@ -1,0 +1,53 @@
+{
+  "description": "Golden tasks run against the synthetic Meridian corpus, in two conditions: librarian-enabled (catalog + AGENTS.md protocol present) vs bare (same corpus, no librarian assets). Score each answer against ground_truth_*.json; record agent tokens per task.",
+  "prompt_preamble_librarian": "You are answering a question about the repo at {root}. The repo maintains a knowledge catalog: read _index/CATALOG.md and _index/STALENESS.md first and follow AGENTS.md's routing protocol (route via domain/read_when; check last_verified and authority before trusting a number; a KB-CONTRADICTED marker means the claim is false). Be efficient: open only the files you need.",
+  "prompt_preamble_bare": "You are answering a question about the repo at {root}. Explore it however you like. Be efficient: open only the files you need.",
+  "tasks": [
+    {
+      "id": "T1",
+      "type": "locate-distinctive",
+      "prompt": "What is the zebra-window rule for dock scheduling, and who approves overbooking?"
+    },
+    {
+      "id": "T2",
+      "type": "common-term-routing",
+      "prompt": "I need to compute the tender rejection rate in SQL. What are the exact numerator, denominator, exclusions, and grain per our canonical definition?"
+    },
+    {
+      "id": "T3",
+      "type": "stale-fact-trap",
+      "prompt": "How many active carriers do we currently work with? Give the number you'd put in an exec deck."
+    },
+    {
+      "id": "T4",
+      "type": "absence-claim",
+      "prompt": "Do we have a fuel index source of record? If so, which one — and if not, say so."
+    },
+    {
+      "id": "T5",
+      "type": "artifact-routing",
+      "prompt": "Which file computes the monthly revenue rollup, what is its grain, and what does it exclude?"
+    },
+    {
+      "id": "T6",
+      "type": "provisional-propagation",
+      "prompt": "Finance wants to publish Q2 vendor spend ($ figure) in the board pack tomorrow. Can they? Answer with the figure and yes/no + why."
+    },
+    {
+      "id": "T7",
+      "type": "quarantined-claim",
+      "prompt": "Does every lane have a dedicated backup carrier assigned? Answer precisely."
+    },
+    {
+      "id": "T8",
+      "type": "verify-only",
+      "prompt": "What is the current open claims backlog? Quote a number you'd stand behind right now."
+    }
+  ],
+  "modes": {
+    "per-task": "one cold agent per task per condition (run 1; over-charges the catalog read)",
+    "session": "one agent answers ALL tasks per condition — catalog paid once; the realistic accounting (run 2+)"
+  },
+  "metrics_per_task": ["correct (bool)", "stale_or_false_asserted (bool)", "agent_tokens", "tool_calls (if available)"],
+  "headline_metrics": ["tokens per correct answer", "stale/false facts asserted (count)", "task accuracy"]
+}
