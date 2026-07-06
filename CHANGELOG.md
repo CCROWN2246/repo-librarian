@@ -5,6 +5,15 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
+### Added
+- `librarian suggest [--write] [--domain X]` — auto-drafts `[[artifact]]` registry entries
+  for every uncovered code/data file by harvesting its self-description: SQL leading
+  comments, Python docstrings, shell header comments, a notebook's first markdown
+  heading, CSV header rows (columns + row count), JSON top-level keys. Drafts land with
+  `read_when = []  # TODO` so routing phrases still get a human/agent pass.
+- Data files are now watched by default: `covered_ext` gains `.csv`, `.tsv`,
+  `.parquet`, `.xlsx`.
+
 ## [0.1.0] - 2026-07-02
 
 ### Added

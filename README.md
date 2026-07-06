@@ -84,6 +84,7 @@ $ cd examples/demo-repo && librarian verify
 | `librarian status` | One-screen health summary (`--hook` powers the session nudge) |
 | `librarian search "task phrase"` | Route by `read_when`/`tags`/`title` — cheaper and truer than grep |
 | `librarian backfill DIR --write` | Bulk-stamp skeleton frontmatter onto existing docs |
+| `librarian suggest [--write]` | Auto-draft registry entries for uncovered SQL/scripts/notebooks/CSVs (harvests comments, docstrings, headers) |
 | `librarian ingest FILE` | Triage an `_inbox/` upload: tier → frontmatter → file it |
 | `librarian doctor` | Sanity-check config, registry, hooks, and verify sources |
 

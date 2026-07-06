@@ -31,7 +31,7 @@ DEFAULT_SKIP_DIRS = [
     "venv",
 ]
 DEFAULT_SKIP_FILES = ["CLAUDE.md", "AGENTS.md", "KNOWLEDGE_PROTOCOL.md"]
-DEFAULT_COVERED_EXT = [".sql", ".py", ".json", ".sh", ".ipynb"]
+DEFAULT_COVERED_EXT = [".sql", ".py", ".json", ".sh", ".ipynb", ".csv", ".tsv", ".parquet", ".xlsx"]
 DEFAULT_STATUSES = ["authoritative", "provisional", "draft", "reference", "retired", "archived"]
 DEFAULT_AUTHORITIES = ["verified", "curated", "unverified"]
 DEFAULT_REQUIRED_DOC = ["id", "title", "domain", "status", "last_verified"]

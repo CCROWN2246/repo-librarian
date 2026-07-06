@@ -13,7 +13,19 @@ import sys
 import time
 from pathlib import Path
 
-from . import __version__, backfill, catalog, config, doctor, ingest, registry, render, scaffold, verify
+from . import (
+    __version__,
+    backfill,
+    catalog,
+    config,
+    doctor,
+    ingest,
+    registry,
+    render,
+    scaffold,
+    suggest,
+    verify,
+)
 from .config import Config, ConfigError
 from .output import Reporter, tag
 
@@ -57,6 +69,11 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument(
         "--check", action="store_true", help="exit 1 if any [index].fail_on category is non-empty (CI gate)"
     )
+
+    sp = sub.add_parser("suggest", help="auto-draft registry entries for uncovered code/data files")
+    _add_common(sp, json_flag=False)
+    sp.add_argument("--write", action="store_true", help="append drafts to the registry (default: print)")
+    sp.add_argument("--domain", default="uncategorized", help="domain to stamp on drafts")
 
     sp = sub.add_parser("verify", help="fact-check doc claims against their live sources")
     _add_common(sp)
@@ -176,6 +193,33 @@ def cmd_index(args, rep: Reporter) -> int:
         if failures:
             rep.error(f"index --check gate hit: {', '.join(failures)} (see {cfg.index_dir}/STALENESS.md)")
             return 1
+    return 0
+
+
+def cmd_suggest(args, rep: Reporter) -> int:
+    cfg = _resolve_config(args)
+    res = _build_catalog(cfg)
+    suggestions = suggest.build_suggestions(cfg, res)
+    if not suggestions:
+        rep.say("No uncovered code/data files — the registry covers everything the scan watches.")
+        return 0
+    blocks = [suggest.to_toml(s, config.today(), domain=args.domain) for s in suggestions]
+    if args.write:
+        reg = suggest.append_to_registry(cfg, blocks)
+        res = _build_catalog(cfg)
+        render.write_all(cfg, res)
+        rep.say(
+            f"appended {len(blocks)} draft entr{'y' if len(blocks) == 1 else 'ies'} to {reg.name} "
+            "and reindexed."
+        )
+        rep.say("Review each draft: set the real domain/status and write read_when task phrases.")
+    else:
+        rep.say(
+            f"# {len(blocks)} draft(s) — review, then paste into {cfg.artifacts_file} "
+            "(or re-run with --write):\n"
+        )
+        for b in blocks:
+            rep.say(b)
     return 0
 
 
@@ -461,6 +505,7 @@ def cmd_doctor(args, rep: Reporter) -> int:
 COMMANDS = {
     "init": cmd_init,
     "index": cmd_index,
+    "suggest": cmd_suggest,
     "verify": cmd_verify,
     "status": cmd_status,
     "search": cmd_search,

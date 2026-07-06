@@ -39,9 +39,18 @@ $ librarian backfill transcripts/ --write \
 ```
 
 Skeleton frontmatter is stamped onto every `.md` that lacks it (id from path, title
-from the first heading). Then refine per doc: real `domain`, `read_when` task phrases,
-`status`, `authority`. Working `_index/STALENESS.md` to zero is the onboarding worklist
-— see [Adopting in a large repo](adopting.md).
+from the first heading). Then draft the non-markdown side the same way:
+
+```console
+$ librarian suggest --write --domain data     # auto-draft registry entries for
+                                              # uncovered SQL/scripts/notebooks/CSVs
+```
+
+Each draft harvests the file's own self-description (SQL comments, docstrings, CSV
+headers) and leaves `read_when` as a TODO for a review pass. Then refine per doc/entry:
+real `domain`, `read_when` task phrases, `status`, `authority`. Working
+`_index/STALENESS.md` to zero is the onboarding worklist — see
+[Adopting in a large repo](adopting.md).
 
 ## 3. Index and route
 

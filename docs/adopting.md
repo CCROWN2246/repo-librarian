@@ -28,9 +28,10 @@ Everything lands as `draft`/`reference` and shows in STALENESS — that's the de
 
 1. Refine each doc: real `domain`, `read_when` task phrases (see the
    [taxonomy guide](taxonomy.md)), promote to `authoritative` when reviewed.
-2. Register non-markdown artifacts as the coverage backlog lists them. One entry each,
-   in `librarian-artifacts.toml`; the `desc`/`source_of_truth` fields are where "this
-   is an EXPORT, regenerate don't edit" lives.
+2. Register non-markdown artifacts: `librarian suggest --write` auto-drafts an entry
+   for every file on the coverage backlog (harvesting SQL comments, docstrings, CSV
+   headers), then you review each — set the real domain, write `read_when`, and use
+   `desc`/`source_of_truth` for "this is an EXPORT, regenerate don't edit".
 3. Triage `_inbox/` with `librarian ingest`.
 
 ## 3. Seed verify with the facts that already burned you
