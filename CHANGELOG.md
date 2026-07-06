@@ -13,6 +13,13 @@ All notable changes to this project are documented here. Format follows
   `read_when = []  # TODO` so routing phrases still get a human/agent pass.
 - Data files are now watched by default: `covered_ext` gains `.csv`, `.tsv`,
   `.parquet`, `.xlsx`.
+- Catalog token-cost guard: `librarian status` now shows an estimated always-load
+  cost for CATALOG.md and warns past `[index].catalog_token_budget` (default 12k
+  tokens ≈ ~450 entries; 0 disables).
+- `benchmarks/`: synthetic corpus generator with planted failure modes, golden
+  tasks, and a running results log (`RESULTS.md`) including the honest finding:
+  measured ~2× session-token premium vs a bare frontier agent, bought back as
+  correctness (8/8 vs 7/8; live-verified answers; full provenance).
 
 ## [0.1.0] - 2026-07-02
 

@@ -91,6 +91,29 @@ $ cd examples/demo-repo && librarian verify
 Exit codes everywhere: `0` clean · `1` findings (drift / gate / attention) · `2` config
 error. Every read command takes `--json`.
 
+## The numbers (measured, warts included)
+
+We benchmarked it the hard way: a 200-doc synthetic company repo with planted failure
+modes (stale numbers echoed into fresher-dated docs, a fact that lives in *no* doc,
+frontmatter-only provisional flags), answered start-to-finish by identical
+frontier-model agents — one with the librarian, one without
+([methodology + full log](benchmarks/RESULTS.md)):
+
+| | With librarian | Bare repo |
+|---|---|---|
+| Task accuracy | **8/8** | 7/8 |
+| "What's the current backlog?" (truth in no doc) | **ran the registered check, caught the drifted baseline, quoted live: 93** | refused to quote, never found the live source — no answer |
+| Provenance (authority + freshness) cited | every answer | most answers |
+| Session tokens | 40.3k | 17.9k |
+
+The honest read: **against a strong agent, this is not a token-saver — it's a
+correctness layer with a bounded, amortized cost** (~7.5k tokens of always-load
+catalog at 200 files; warned at a configurable budget via `librarian status`). It pays
+for itself on any fact whose truth lives outside the docs, any corpus where drift
+echoes outnumber the source, and any deliverable where one stale number costs more
+than a few thousand tokens. Modern agents grep well; docs don't know when they're
+wrong. This fixes the second problem.
+
 ## What it is not
 
 Not RAG. Retrieval systems retrieve stale facts *faster*; nothing in a vector index

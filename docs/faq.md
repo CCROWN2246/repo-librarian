@@ -29,11 +29,14 @@ knowledge in `read_when`; `librarian search` uses it.
 
 ## Does it save tokens?
 
-Honestly: modestly. The origin project measured catalog-guided sessions opening 1–2
-files where baseline sessions burned 22–29k tokens just locating the right file — but
-capable agents grep distinctively-named files efficiently, so the routing win is real
-but not the headline. **The decisive, validated value is correctness** (the 164-vs-181
-drift story in the README). Adopt it for verify; enjoy the routing.
+Honestly: no — not against a frontier agent, and we measured it twice so you don't
+have to trust vibes. The origin project's spike and our own [benchmark](../benchmarks/RESULTS.md)
+agree: capable agents grep well, and a librarian-guided session costs ~2× (the
+always-load catalog ≈ 7.5k tokens at 200 files, bounded and warned at a configurable
+budget). What that premium buys, measured: the answer no document holds (live verify),
+zero stale facts asserted, and authority/freshness provenance on every claim. **The
+decisive, validated value is correctness** (the 164-vs-181 drift story in the README).
+Adopt it for verify; enjoy the routing.
 
 ## How is this different from just having a CLAUDE.md / AGENTS.md?
 

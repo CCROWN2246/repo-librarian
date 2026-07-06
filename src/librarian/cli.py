@@ -282,6 +282,15 @@ def _verify_age_days(cfg: Config) -> int | None:
         return None
 
 
+def _catalog_token_estimate(cfg: Config) -> int:
+    """Estimated always-load cost of CATALOG.md (~4 chars/token heuristic)."""
+    path = cfg.path(cfg.index_dir) / "CATALOG.md"
+    try:
+        return path.stat().st_size // 4
+    except OSError:
+        return 0
+
+
 def cmd_status(args, rep: Reporter) -> int:
     cfg = _resolve_config(args)
     data = _load_catalog_json(cfg)
@@ -313,6 +322,12 @@ def cmd_status(args, rep: Reporter) -> int:
         attention.append(
             "facts unverified " + (f"{age}d" if age is not None else "ever") + " — run `librarian verify`"
         )
+    catalog_tokens = _catalog_token_estimate(cfg)
+    if cfg.catalog_token_budget and catalog_tokens > cfg.catalog_token_budget:
+        attention.append(
+            f"CATALOG.md ≈ {catalog_tokens // 1000}k tokens (> {cfg.catalog_token_budget // 1000}k "
+            "budget) — archive retired docs or split the corpus"
+        )
 
     if args.hook:
         if attention:
@@ -326,6 +341,7 @@ def cmd_status(args, rep: Reporter) -> int:
                 "attention": attention,
                 "flagged": s["flagged"],
                 "unregistered": s["unregistered"],
+                "catalog_tokens_estimate": catalog_tokens,
             }
         )
         return 1 if attention else 0
@@ -335,7 +351,7 @@ def cmd_status(args, rep: Reporter) -> int:
     )
     rep.say(
         f"  flagged: {s['flagged']} · unregistered code/data: {s['unregistered']} · "
-        f"absence-claims: {s['absence_claims']}"
+        f"absence-claims: {s['absence_claims']} · catalog ≈ {catalog_tokens / 1000:.1f}k tokens"
     )
     rep.say(
         "  facts last verified: "

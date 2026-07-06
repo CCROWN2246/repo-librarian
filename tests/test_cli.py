@@ -89,6 +89,22 @@ class CliTests(CliCase):
         self.assertEqual(code, 0)
         self.assertIn("awaiting intake", out)
 
+    def test_catalog_token_budget_warning(self):
+        self.write("docs/a.md", make_doc(last_verified="2026-07-01"))
+        self.write(".librarian.toml", "schema_version = 1\n[index]\ncatalog_token_budget = 1\n")
+        self.run_sub("index")
+        code, out, _ = self.run_sub("status")
+        self.assertEqual(code, 1)
+        self.assertIn("budget", out)
+        code, out, _ = self.run_sub("status", "--hook")
+        self.assertEqual(code, 0)
+        self.assertIn("CATALOG.md", out)
+        # budget 0 disables the warning
+        self.write(".librarian.toml", "schema_version = 1\n[index]\ncatalog_token_budget = 0\n")
+        self.run_sub("index")
+        code, _, _ = self.run_sub("status")
+        self.assertEqual(code, 0)
+
     def test_search(self):
         self.write("docs/schema.md", make_doc(id="schema", read_when="write athena query"))
         self.write("docs/other.md", make_doc(id="other", title="Other", read_when="deploy"))

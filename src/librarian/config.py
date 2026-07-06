@@ -101,6 +101,10 @@ class Config:
     absence_guard: bool = True
     absence_extra_patterns: list[str] = field(default_factory=list)
     fail_on: list[str] = field(default_factory=list)
+    # warn when CATALOG.md's estimated token cost exceeds this (0 = off).
+    # ~25 tokens/entry: 200 entries ≈ 7.5k tokens (fine), 500 ≈ 13k (the always-load
+    # layer starts eating the budget it was built to protect).
+    catalog_token_budget: int = 12000
     # verify
     stamp_docs: bool = False
     default_timeout: int = 60
@@ -215,11 +219,12 @@ def load(root: Path) -> Config:
     idx = _take(
         data.pop("index", {}),
         "[index]",
-        {"absence_guard": bool, "absence_extra_patterns": list, "fail_on": list},
+        {"absence_guard": bool, "absence_extra_patterns": list, "fail_on": list, "catalog_token_budget": int},
     )
     cfg.absence_guard = idx.get("absence_guard", cfg.absence_guard)
     cfg.absence_extra_patterns = idx.get("absence_extra_patterns", cfg.absence_extra_patterns)
     cfg.fail_on = idx.get("fail_on", cfg.fail_on)
+    cfg.catalog_token_budget = idx.get("catalog_token_budget", cfg.catalog_token_budget)
     bad = set(cfg.fail_on) - FAIL_ON_CATEGORIES
     if bad:
         raise ConfigError(

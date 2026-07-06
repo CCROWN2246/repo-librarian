@@ -1,5 +1,38 @@
 # Benchmark results (running log — methodology evolves, all runs kept)
 
+## Run 2 — 2026-07-06 · session mode · corpus v2 (200 docs, stale echoes, de-labeled bodies, verify-only task)
+
+One agent per condition answered all 8 tasks in a single session (catalog paid once —
+the realistic accounting). Same model both sides (Claude Fable 5 Explore subagents).
+
+| | Librarian | Bare |
+|---|---|---|
+| Accuracy | **8/8** | 7/8 |
+| Q8 (verify-only: live value in NO doc) | **93 — ran the registered check, saw the 87 baseline had drifted, quoted live** | refused to quote ("pull it live") but **never found the warehouse; no answer** |
+| Stale/false facts asserted | 0 | 0 |
+| Provenance cited per answer | every answer (authority + freshness) | most answers |
+| Session tokens | 40,309 | 17,858 |
+| Tool calls + commands | 7 + 6 | 8 + 2 |
+
+**The honest headline, consistent across Run 1, Run 2, and the origin project's spike:**
+
+> Against a frontier agent on a decently-named corpus, repo-librarian does **not** save
+> tokens — it costs roughly 2× per session (~22k premium here: catalog + protocol +
+> verify runs) and **buys correctness**: the answer no document holds (live verify),
+> explicit authority/freshness grounding on every claim, and refusal-with-a-path
+> instead of refusal-empty-handed.
+
+Where the premium concentrates: the always-load catalog (~7.5k tokens at 204 entries —
+bounded, amortized across a session) and the verify executions. Where it pays for
+itself: any fact whose truth lives outside the docs, any corpus where drift echoes
+outnumber the authoritative source, and any deliverable where one stale number costs
+more than 22k tokens (i.e., most exec decks).
+
+Baseline respect: modern agents grep *very* well. Run 1's distractor and stale-trap
+tasks were all solved by the bare agent reading candidate docs and reasoning about
+freshness in-band. The tool's edge is narrowest on lookup tasks and widest on
+live-truth and provenance tasks — design your KB (and your expectations) accordingly.
+
 ## Run 1 — 2026-07-06 · per-task cold agents · corpus v1 (200 docs, seed 7)
 
 Setup: 7 golden tasks × 2 conditions (librarian-enabled vs bare copy of the same corpus),
