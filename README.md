@@ -86,6 +86,7 @@ $ cd examples/demo-repo && librarian verify
 | `librarian backfill DIR --write` | Bulk-stamp skeleton frontmatter onto existing docs |
 | `librarian suggest [--write]` | Auto-draft registry entries for uncovered SQL/scripts/notebooks/CSVs (harvests comments, docstrings, headers) |
 | `librarian ingest FILE` | Triage an `_inbox/` upload: tier → frontmatter → file it |
+| `librarian dream [--json] [--mark-done]` | Build the maintenance worklist (conflicts, dup docs, weak routing); drives the `/kb-dream` propose-only cycle |
 | `librarian doctor` | Sanity-check config, registry, hooks, and verify sources |
 
 Exit codes everywhere: `0` clean · `1` findings (drift / gate / attention) · `2` config
@@ -126,6 +127,7 @@ the agent reads first, plus checks that keep the facts honest. (More in the
 [Quickstart](docs/quickstart.md) · [The protocol](docs/protocol.md) ·
 [Verify cookbook](docs/verify-cookbook.md) (psql, mysql, Athena, curl, dbt, pytest…) ·
 [Taxonomy guide](docs/taxonomy.md) · [Conflict resolution](docs/conflicts.md) ·
+[The dream cycle](docs/dream.md) (overnight/on-nudge maintenance) ·
 [Adopting in a large repo](docs/adopting.md) · [NAVIGATOR authoring](docs/navigator-guide.md) ·
 [FAQ](docs/faq.md)
 

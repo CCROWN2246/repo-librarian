@@ -48,6 +48,13 @@ schema_version = 1
 # extract = "column_absent:email"
 # expect  = "absent"
 
+[dream]
+# The dream cycle (`/kb-dream`) drafts maintenance proposals — conflict resolutions,
+# doc-merge candidates, routing (read_when) fixes + absence-claim audits — propose-only
+# on a branch. `librarian status` nudges when the worklist is due.
+# nudge_after_days = 14                    # re-nudge on the SAME items after N days (0 = off)
+# merge_similarity = 0.6                   # metadata overlap (0-1) to flag a merge candidate
+
 [agent]
 # claude = true                            # scaffold .claude/ glue on init
 # agents_md = true                         # maintain the managed block in AGENTS.md

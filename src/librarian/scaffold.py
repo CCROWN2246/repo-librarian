@@ -211,6 +211,14 @@ def init(root: Path, *, agent: str = "both", index_dir: str = "_index", upgrade:
         )
         _write_managed(
             root,
+            ".claude/commands/kb-dream.md",
+            _asset("claude/commands/kb-dream.md"),
+            manifest,
+            report,
+            upgrade=upgrade,
+        )
+        _write_managed(
+            root,
             ".claude/hooks/librarian-session.sh",
             _asset("claude/librarian-session.sh"),
             manifest,

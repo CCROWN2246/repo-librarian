@@ -141,6 +141,39 @@ class CliTests(CliCase):
         self.assertEqual(code, 0)
         self.assertIn("domain: data", self.read("docs/naked.md"))
 
+    def test_dream_due_then_marked_done(self):
+        body = make_doc(last_verified="2026-07-01") + (
+            "\nclaim <!-- KB-CONTRADICTED: conflicts with [verified: y] -->\n"
+        )
+        self.write("docs/c.md", body)
+        self.run_sub("index")
+        # due: exit 1, names the conflict path
+        code, out, _ = self.run_sub("dream")
+        self.assertEqual(code, 1)
+        self.assertIn("DUE", out)
+        self.assertIn("docs/c.md", out)
+        # --json carries the due flag + worklist
+        code, out, _ = self.run_sub("dream", "--json")
+        self.assertEqual(code, 1)
+        data = json.loads(out)
+        self.assertTrue(data["due"])
+        self.assertEqual(data["worklist"]["counts"]["open_conflicts"], 1)
+        # mark-done resets the gate -> exit 0
+        code, _, _ = self.run_sub("dream", "--mark-done")
+        self.assertEqual(code, 0)
+        code, out, _ = self.run_sub("dream")
+        self.assertEqual(code, 0)
+
+    def test_status_surfaces_dream_nudge(self):
+        body = make_doc(last_verified="2026-07-01") + (
+            "\nclaim <!-- KB-CONTRADICTED: conflicts with [verified: y] -->\n"
+        )
+        self.write("docs/c.md", body)
+        self.run_sub("index")
+        code, out, _ = self.run_sub("status", "--hook")
+        self.assertEqual(code, 0)
+        self.assertIn("/kb-dream", out)
+
     def test_doctor_runs(self):
         code, out, _ = self.run_sub("doctor")
         self.assertIn(code, (0, 1))

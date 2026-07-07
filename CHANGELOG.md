@@ -5,7 +5,17 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-07-07
+
 ### Added
+- **The dream cycle** — `librarian dream` builds a deterministic maintenance worklist
+  (OPEN conflicts, duplicate-doc merge candidates, weak/empty `read_when`, absence-claims)
+  for zero tokens, and the scaffolded `/kb-dream` command drafts fixes for them
+  **propose-only on a branch** (a `MORNING-REPORT.md`; never touches main, never
+  auto-applies). A delta gate (`--mark-done` + `_index/.last_dream`) means most runs are
+  no-ops; `librarian status` nudges only when the worklist is due. Config: `[dream]`
+  `nudge_after_days` (default 14, 0=off) + `merge_similarity` (default 0.6). See
+  [docs/dream.md](docs/dream.md).
 - `librarian suggest [--write] [--domain X]` — auto-drafts `[[artifact]]` registry entries
   for every uncovered code/data file by harvesting its self-description: SQL leading
   comments, Python docstrings, shell header comments, a notebook's first markdown

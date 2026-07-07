@@ -19,6 +19,7 @@ from . import (
     catalog,
     config,
     doctor,
+    dream,
     ingest,
     registry,
     render,
@@ -121,6 +122,14 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--dest", default="docs")
     sp.add_argument("--recheck", default="90d")
     sp.add_argument("--yes", action="store_true", help="accept defaults, no prompts")
+
+    sp = sub.add_parser("dream", help="build the deterministic maintenance worklist (drives /kb-dream)")
+    _add_common(sp)
+    sp.add_argument(
+        "--mark-done",
+        action="store_true",
+        help="stamp the current worklist as reviewed (resets the 'dream is due' nudge)",
+    )
 
     sp = sub.add_parser("doctor", help="sanity-check config, registry, hooks, and verify sources")
     _add_common(sp)
@@ -328,6 +337,11 @@ def cmd_status(args, rep: Reporter) -> int:
             f"CATALOG.md ≈ {catalog_tokens // 1000}k tokens (> {cfg.catalog_token_budget // 1000}k "
             "budget) — archive retired docs or split the corpus"
         )
+    # dream-due nudge — computed from catalog.json (no filesystem walk, hook-cheap)
+    dream_wl = dream.from_catalog_json(data, cfg.dream_merge_similarity)
+    dream_due, _dream_reason = dream.is_due(cfg, dream_wl)
+    if dream_due:
+        attention.append(f"{dream_wl.total} maintenance item(s) ready — run /kb-dream")
 
     if args.hook:
         if attention:
@@ -518,6 +532,47 @@ def cmd_doctor(args, rep: Reporter) -> int:
     return 1 if report.has_problems else 0
 
 
+def cmd_dream(args, rep: Reporter) -> int:
+    cfg = _resolve_config(args)
+    res = _build_catalog(cfg)
+    wl = dream.from_catalog_result(res, cfg.dream_merge_similarity)
+    if args.mark_done:
+        dream.mark_done(cfg, wl)
+        rep.say(f"marked {wl.total} worklist item(s) reviewed — the dream nudge is reset.")
+        return 0
+    due, reason = dream.is_due(cfg, wl)
+    if args.json:
+        rep.emit_json({"due": due, "reason": reason, "worklist": wl.to_dict()})
+        return 1 if due else 0
+    c = wl.counts()
+    rep.say(
+        f"dream worklist: {c['open_conflicts']} conflict(s) · {c['merge_candidates']} merge "
+        f"candidate(s) · {c['read_when_todos']} routing TODO(s) · {c['absence_claims']} absence-claim(s)"
+    )
+    rep.say(f"  {'DUE' if due else 'not due'}: {reason}")
+    if wl.open_conflicts:
+        rep.say("  conflicts:")
+        for x in wl.open_conflicts:
+            rep.say(f"    {x['path']}:{x['line']}")
+    if wl.merge_candidates:
+        rep.say("  merge candidates:")
+        for x in wl.merge_candidates:
+            rep.say(f"    {x['a']}  <->  {x['b']}  (sim {x['similarity']}, {x['domain']})")
+    if wl.read_when_todos:
+        rep.say("  routing TODOs (empty/placeholder read_when):")
+        for x in wl.read_when_todos:
+            rep.say(f"    {x['path']}")
+    if wl.absence_claims:
+        rep.say("  absence-claims to audit:")
+        for x in wl.absence_claims:
+            rep.say(f"    {x['path']}:{x['line']}")
+    if due:
+        rep.say(
+            "\nRun /kb-dream to draft proposals on a branch, or `librarian dream --mark-done` to dismiss."
+        )
+    return 1 if due else 0
+
+
 COMMANDS = {
     "init": cmd_init,
     "index": cmd_index,
@@ -527,6 +582,7 @@ COMMANDS = {
     "search": cmd_search,
     "backfill": cmd_backfill,
     "ingest": cmd_ingest,
+    "dream": cmd_dream,
     "doctor": cmd_doctor,
 }
 

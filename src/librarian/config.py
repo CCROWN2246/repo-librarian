@@ -110,6 +110,9 @@ class Config:
     default_timeout: int = 60
     sources: dict[str, Source] = field(default_factory=dict)
     checks: list[Check] = field(default_factory=list)
+    # dream (overnight/on-nudge maintenance worklist)
+    dream_nudge_after_days: int = 14  # 0 = disable the "dream is due" nudge
+    dream_merge_similarity: float = 0.6  # metadata Jaccard to flag a merge candidate
     # agent
     agent_claude: bool = True
     agent_agents_md: bool = True
@@ -295,6 +298,14 @@ def load(root: Path) -> Config:
             if src is None or not src.command:
                 raise ConfigError(f"{where}: uses 'arg' but source {check.source!r} has no command template")
         cfg.checks.append(check)
+
+    dream = _take(
+        data.pop("dream", {}),
+        "[dream]",
+        {"nudge_after_days": int, "merge_similarity": float},
+    )
+    cfg.dream_nudge_after_days = dream.get("nudge_after_days", cfg.dream_nudge_after_days)
+    cfg.dream_merge_similarity = dream.get("merge_similarity", cfg.dream_merge_similarity)
 
     agent = _take(data.pop("agent", {}), "[agent]", {"claude": bool, "agents_md": bool})
     cfg.agent_claude = agent.get("claude", cfg.agent_claude)

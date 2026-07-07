@@ -90,4 +90,6 @@ instead of hiding.
 - `librarian search <task phrase>` — rank docs by `read_when`/`tags`/`title`/`domain` match.
 - `librarian backfill <dir> --write` — bulk-stamp skeleton frontmatter onto un-annotated docs.
 - `librarian ingest <file>` — triage an `_inbox/` upload (tier → frontmatter → file it).
+- `librarian dream` — build the deterministic maintenance worklist (conflicts, merge candidates,
+  routing TODOs, absence-claims); drives the `/kb-dream` propose-only cycle. `status` nudges when due.
 - `librarian doctor` — sanity-check config, registry, hooks, and verify sources.
