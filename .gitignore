@@ -7,3 +7,17 @@ build/
 venv/
 .pytest_cache/
 .ruff_cache/
+
+# This is the tool itself, not a consumer repo — never commit a self-install.
+# (Guards against an accidental `librarian init` at the repo root.)
+/.librarian.toml
+/librarian-artifacts.toml
+/KNOWLEDGE_PROTOCOL.md
+/AGENTS.md
+/_index/
+/_inbox/
+/_archive/
+/.githooks/
+/.claude/
+/docs/NAVIGATOR.md
+/MORNING-REPORT.md

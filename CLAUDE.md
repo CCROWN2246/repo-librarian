@@ -53,11 +53,4 @@ before tagging — Windows and the ruff job have caught things local runs didn't
   the `workflow` scope for pushing `.github/workflows/` over HTTPS.
 - CONTRIBUTING.md has the contributor-facing version of the rules above.
 
-<!-- librarian:begin (managed by `librarian init`; edits inside will be overwritten) -->
-## Knowledge protocol
-
-Follow the **librarian protocol** in `AGENTS.md` (full reference: `KNOWLEDGE_PROTOCOL.md`): start every
-session from `_index/CATALOG.md` + `_index/STALENESS.md`, route via `domain`/`read_when` instead of
-reading the whole corpus, freshness-gate facts (`librarian verify`), capture discoveries back into docs,
-and resolve conflicts by authority tier — never by recency.
-<!-- librarian:end -->
+_(This repo is the tool itself — it is deliberately not "librarian-ized" with its own catalog install.)_
