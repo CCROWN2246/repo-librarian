@@ -38,7 +38,7 @@ drift became a red line in CI instead of a wrong number in an exec deck.
    open conflicts, coverage gaps, intake queue), and `_index/catalog.json` (the machine
    surface for hooks and `librarian search`).
 3. **An agent protocol** — `librarian init` scaffolds `AGENTS.md` (read by Cursor,
-   Copilot, Codex, …) and Claude Code glue (`/kb` command, session-start freshness
+   Copilot, Codex, …) and Claude Code glue (`/librarian` command, session-start freshness
    nudge): route via the catalog, never read the whole corpus, freshness-gate facts,
    capture discoveries back into docs, and resolve conflicts **by authority tier, never
    by recency** — a contradicted claim gets quarantined in place, not silently trusted
@@ -86,7 +86,7 @@ $ cd examples/demo-repo && librarian verify
 | `librarian backfill DIR --write` | Bulk-stamp skeleton frontmatter onto existing docs |
 | `librarian suggest [--write]` | Auto-draft registry entries for uncovered SQL/scripts/notebooks/CSVs (harvests comments, docstrings, headers) |
 | `librarian ingest FILE` | Triage an `_inbox/` upload: tier → frontmatter → file it |
-| `librarian dream [--json] [--mark-done]` | Build the maintenance worklist (conflicts, dup docs, weak routing); drives the `/kb-dream` propose-only cycle |
+| `librarian dream [--json] [--mark-done]` | Build the maintenance worklist (conflicts, dup docs, weak routing); drives the `/librarian-dream` propose-only cycle |
 | `librarian doctor` | Sanity-check config, registry, hooks, and verify sources |
 
 Exit codes everywhere: `0` clean · `1` findings (drift / gate / attention) · `2` config

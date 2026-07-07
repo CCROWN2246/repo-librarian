@@ -207,12 +207,17 @@ def init(root: Path, *, agent: str = "both", index_dir: str = "_index", upgrade:
     if agent in ("claude", "both"):
         _apply_block(root, "CLAUDE.md", _asset("CLAUDE_BLOCK.md"), manifest, report)
         _write_managed(
-            root, ".claude/commands/kb.md", _asset("claude/commands/kb.md"), manifest, report, upgrade=upgrade
+            root,
+            ".claude/commands/librarian.md",
+            _asset("claude/commands/librarian.md"),
+            manifest,
+            report,
+            upgrade=upgrade,
         )
         _write_managed(
             root,
-            ".claude/commands/kb-dream.md",
-            _asset("claude/commands/kb-dream.md"),
+            ".claude/commands/librarian-dream.md",
+            _asset("claude/commands/librarian-dream.md"),
             manifest,
             report,
             upgrade=upgrade,

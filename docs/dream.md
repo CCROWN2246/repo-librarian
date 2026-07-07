@@ -12,7 +12,7 @@ Most of repo-librarian is deterministic and free: `index` inventories, `verify` 
 - **Absence-claims** — a doc says "we don't have X"; someone has to check whether the KB already
   fills that gap elsewhere.
 
-The **dream cycle** (`/kb-dream`) does exactly these four, on your schedule, **propose-only**. It's
+The **dream cycle** (`/librarian-dream`) does exactly these four, on your schedule, **propose-only**. It's
 modeled on the good invariants of Garry Tan's gbrain "dream" — deterministic-work-before-LLM-work,
 a review queue instead of auto-apply, honest reporting of no-ops — without the embeddings/DB
 machinery repo-librarian deliberately avoids.
@@ -21,12 +21,12 @@ machinery repo-librarian deliberately avoids.
 
 ```
 librarian dream            # deterministic: build the worklist, tell you if it's DUE
-librarian dream --json     # same, machine-readable — what /kb-dream consumes
+librarian dream --json     # same, machine-readable — what /librarian-dream consumes
 librarian dream --mark-done  # stamp the worklist reviewed; resets the nudge
 ```
 
 `librarian dream` walks the catalog and builds a **worklist** of the four buckets above — for zero
-tokens. The `/kb-dream` slash command is the agent half: it reads that worklist and drafts
+tokens. The `/librarian-dream` slash command is the agent half: it reads that worklist and drafts
 proposals. The split is deliberate — the CLI decides *what* needs attention deterministically; the
 model only spends tokens on the judgment.
 
@@ -41,9 +41,9 @@ or the *same* items have sat unreviewed longer than `[dream].nudge_after_days` (
 - You keep ignoring the same items → re-nudged after two weeks, not every session.
 
 `librarian status` (and the session-start hook) surface the nudge — "N maintenance items ready —
-run /kb-dream" — computed cheaply from `catalog.json`, no extra filesystem walk.
+run /librarian-dream" — computed cheaply from `catalog.json`, no extra filesystem walk.
 
-## What `/kb-dream` does (propose-only, on a branch)
+## What `/librarian-dream` does (propose-only, on a branch)
 
 1. Runs `librarian dream --json`. **If not due, it stops** — no branch, no tokens.
 2. Creates `kb/dream-<date>` and does the judgment work for each non-empty bucket:
@@ -74,5 +74,5 @@ merge_similarity = 0.6   # metadata Jaccard (0-1) to flag a doc pair as a merge 
 ```
 
 `merge_similarity` is a deterministic pre-filter over title + `read_when` + `tags`; expect false
-positives (shared vocabulary), which `/kb-dream` is told to identify and discard. Lower it to catch
+positives (shared vocabulary), which `/librarian-dream` is told to identify and discard. Lower it to catch
 more pairs, raise it to reduce noise.

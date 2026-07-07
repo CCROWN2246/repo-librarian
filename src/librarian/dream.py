@@ -1,7 +1,7 @@
 """The dream cycle's deterministic half: build the worklist, gate the spend.
 
 Philosophy (see docs/dream.md): the CLI decides *what* needs judgment — for zero
-tokens — and an agent (`/kb-dream`) exercises the judgment, propose-only, on a
+tokens — and an agent (`/librarian-dream`) exercises the judgment, propose-only, on a
 branch. Three job types survive scope triage:
 
   open_conflicts   OPEN KB-CONTRADICTED lines that need a drafted resolution

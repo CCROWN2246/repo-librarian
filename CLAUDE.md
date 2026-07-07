@@ -25,7 +25,7 @@ positioning (measured, in `benchmarks/RESULTS.md`): it is a **correctness layer,
 - `catalog.py` (pure engine: `(config, today, artifacts) → CatalogResult`) + `render.py` (writes the 3 outputs; **STALENESS.md line 3 is a compatibility surface** — don't reorder its phrases) + `scanner.py`.
 - `registry.py` — `librarian-artifacts.toml` loader with per-entry validation.
 - `verify.py` + `extractors.py` — command-runner checks; exit-3 = SKIP contract; baselines in `_index/baselines.json`.
-- `dream.py` — deterministic maintenance worklist + delta gate (`is_due`/`mark_done`); `/kb-dream` is the agent half.
+- `dream.py` — deterministic maintenance worklist + delta gate (`is_due`/`mark_done`); `/librarian-dream` is the agent half.
 - `suggest.py`, `backfill.py`, `ingest.py`, `scaffold.py` (init/upgrade/uninstall via hash manifest), `doctor.py`, `output.py`.
 - `assets/` — everything `init` scaffolds into a consuming repo (protocol, NAVIGATOR template, `.claude/` glue, `.githooks/`, config template). Editing agent behavior = edit these.
 
@@ -52,3 +52,12 @@ before tagging — Windows and the ruff job have caught things local runs didn't
 - Remote is **SSH** (`git@github.com:CCROWN2246/repo-librarian.git`) because the OAuth token lacks
   the `workflow` scope for pushing `.github/workflows/` over HTTPS.
 - CONTRIBUTING.md has the contributor-facing version of the rules above.
+
+<!-- librarian:begin (managed by `librarian init`; edits inside will be overwritten) -->
+## Knowledge protocol
+
+Follow the **librarian protocol** in `AGENTS.md` (full reference: `KNOWLEDGE_PROTOCOL.md`): start every
+session from `_index/CATALOG.md` + `_index/STALENESS.md`, route via `domain`/`read_when` instead of
+reading the whole corpus, freshness-gate facts (`librarian verify`), capture discoveries back into docs,
+and resolve conflicts by authority tier — never by recency.
+<!-- librarian:end -->

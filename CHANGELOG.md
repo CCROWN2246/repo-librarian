@@ -5,12 +5,21 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-07-07
+
+### Changed
+- **Slash commands renamed to the product** — the scaffolded Claude Code commands are now
+  **`/librarian`** (refresh: index + verify; was `/kb`) and **`/librarian-dream`** (the dream
+  cycle; was `/kb-dream`). The `kb` prefix was heritage from the pre-productization "knowledge
+  base" era. `librarian init --upgrade` installs the new command files; delete any stale
+  `.claude/commands/kb*.md` by hand.
+
 ## [0.2.0] - 2026-07-07
 
 ### Added
 - **The dream cycle** — `librarian dream` builds a deterministic maintenance worklist
   (OPEN conflicts, duplicate-doc merge candidates, weak/empty `read_when`, absence-claims)
-  for zero tokens, and the scaffolded `/kb-dream` command drafts fixes for them
+  for zero tokens, and the scaffolded `/librarian-dream` command drafts fixes for them
   **propose-only on a branch** (a `MORNING-REPORT.md`; never touches main, never
   auto-applies). A delta gate (`--mark-done` + `_index/.last_dream`) means most runs are
   no-ops; `librarian status` nudges only when the worklist is due. Config: `[dream]`
@@ -44,7 +53,7 @@ All notable changes to this project are documented here. Format follows
 - CLI: `init` (idempotent scaffold with managed marker blocks, `--upgrade`,
   `--uninstall`), `index` (`--check` CI gate), `verify`, `status` (`--hook`), `search`,
   `backfill`, `ingest`, `doctor`. Uniform exit codes, `--json` everywhere.
-- Agent glue: AGENTS.md managed block, Claude Code `/kb` command + SessionStart
+- Agent glue: AGENTS.md managed block, Claude Code `/librarian` command + SessionStart
   freshness nudge, tracked `.githooks/pre-commit`.
 - Knowledge protocol (five reflexes incl. the absence-claim guard), NAVIGATOR template,
   intake (`_inbox/`) and archive (`_archive/`) conventions.

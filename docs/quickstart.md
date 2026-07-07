@@ -22,7 +22,7 @@ What init writes (all idempotent — run it twice, zero diff):
 | `librarian-artifacts.toml` | Registry for non-markdown artifacts (SQL, notebooks, data). |
 | `KNOWLEDGE_PROTOCOL.md` | The full protocol reference. |
 | `AGENTS.md` + `CLAUDE.md` | A managed block (markers) — the condensed protocol agents auto-load. Your other content is untouched. |
-| `.claude/` | `/kb` command + a SessionStart nudge (`librarian status --hook`). |
+| `.claude/` | `/librarian` command + a SessionStart nudge (`librarian status --hook`). |
 | `.githooks/pre-commit` | Refreshes the catalog on commit; warns on gaps; never blocks. |
 | `docs/NAVIGATOR.md` | A task→doc routing template (see the [authoring guide](navigator-guide.md)). |
 | `_inbox/`, `_archive/` | Intake staging and doc retirement. |

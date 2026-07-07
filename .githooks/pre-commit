@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# Keep the knowledge-base catalog current + flag coverage/conflict gaps on every commit. NON-blocking.
+# Tracked in .githooks/ + activated via `git config core.hooksPath .githooks` (shareable — a fresh
+# clone re-runs that one config command). Do NOT bypass with --no-verify.
+set -euo pipefail
+ROOT="$(git rev-parse --show-toplevel)"
+cd "$ROOT"
+
+# Degrade silently if the tool isn't installed — a teammate without it can still commit.
+command -v librarian >/dev/null 2>&1 || exit 0
+[ -f .librarian.toml ] || exit 0
+
+echo "pre-commit: refreshing knowledge-base catalog..."
+out=$(librarian index 2>&1) || true
+echo "$out"
+git add _index/CATALOG.md _index/STALENESS.md _index/catalog.json 2>/dev/null || true
+if echo "$out" | grep -qE '[1-9][0-9]* (md-need-fm|unregistered|open conflicts)'; then
+  echo "pre-commit: WARNING — KB coverage/conflict gap (missing frontmatter, unregistered code/data," >&2
+  echo "            or a quarantined conflict). See _index/STALENESS.md. Not blocking the commit." >&2
+fi

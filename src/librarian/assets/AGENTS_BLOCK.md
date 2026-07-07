@@ -36,5 +36,5 @@ Non-.md artifacts are registered in `librarian-artifacts.toml` instead.
 `librarian verify` (fact-check docs vs live sources; DRIFT names the doc to fix) ·
 `librarian status` (health one-liner) · `librarian search "<task phrase>"` (route without grep) ·
 `librarian ingest <file>` (triage an `_inbox/` upload). When `status` says maintenance items
-are ready, run **/kb-dream** — it drafts fixes for conflicts, duplicate docs, and weak routing
+are ready, run **/librarian-dream** — it drafts fixes for conflicts, duplicate docs, and weak routing
 as proposals on a branch (never auto-applied).

@@ -1,0 +1,18 @@
+{
+  "blocks": [
+    "CLAUDE.md"
+  ],
+  "files": {
+    ".claude/commands/librarian-dream.md": "30cd60e7e2594e67f24cb6e50bf4cb26909b08d29de995ae3503448aa1ef1210",
+    ".claude/commands/librarian.md": "f9ac76dd764cd97c2cf101ed39add8c124ac18b277d4c8ce3c553e04ef6a212d",
+    ".claude/hooks/librarian-session.sh": "be6aaf7e63152d7467b849392f8c4e7a0a9136c36b3969872641e6cdf0ab5ee7",
+    ".githooks/pre-commit": "87b6c03557266a684f11d4082ee346f9b346ac53717425fdd2e8619d9aebab21",
+    ".librarian.toml": "9b590762d480dd82c7eb789728a8a9ca4422774f4644c09ccda6e55d8432283e",
+    "KNOWLEDGE_PROTOCOL.md": "624b843de1159f7ed28c012ec303637b505ca1cf7aeda76d412d4ab3e622b7d3",
+    "_archive/README.md": "ab5ba56c9b76c6331864a604170443c9b438bb5a8de039b3e70a86c63f786162",
+    "_inbox/README.md": "2d38c59d10029faed0390a5fc66636b80b4d62d0cc9f70aa2b636b59fed220ac",
+    "docs/NAVIGATOR.md": "5272906229b7acca7e7b7d18f4a077cde7fde8eb4e37025a8596710ab302556f",
+    "librarian-artifacts.toml": "1494054252acc5138d5bd1cebdac1a6280ab104c1456360f0489acdaef37c9a3"
+  },
+  "librarian_version": "0.3.0"
+}

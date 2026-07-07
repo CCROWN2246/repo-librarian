@@ -44,7 +44,8 @@ class InitTests(ScaffoldCase):
             ".githooks/pre-commit",
             "AGENTS.md",
             "CLAUDE.md",
-            ".claude/commands/kb.md",
+            ".claude/commands/librarian.md",
+            ".claude/commands/librarian-dream.md",
             ".claude/hooks/librarian-session.sh",
             ".claude/settings.json",
             "_index/.scaffold.json",
@@ -128,7 +129,7 @@ class UninstallTests(ScaffoldCase):
         scaffold.init(self.root, agent="both")
         report = scaffold.uninstall(self.root)
         self.assertFalse((self.root / "KNOWLEDGE_PROTOCOL.md").exists())
-        self.assertFalse((self.root / ".claude" / "commands" / "kb.md").exists())
+        self.assertFalse((self.root / ".claude" / "commands" / "librarian.md").exists())
         self.assertTrue((self.root / ".librarian.toml").exists())
         self.assertTrue((self.root / "librarian-artifacts.toml").exists())
         agents = (self.root / "AGENTS.md").read_text(encoding="utf-8")

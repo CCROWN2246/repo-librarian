@@ -172,7 +172,7 @@ class CliTests(CliCase):
         self.run_sub("index")
         code, out, _ = self.run_sub("status", "--hook")
         self.assertEqual(code, 0)
-        self.assertIn("/kb-dream", out)
+        self.assertIn("/librarian-dream", out)
 
     def test_doctor_runs(self):
         code, out, _ = self.run_sub("doctor")

@@ -123,7 +123,9 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--recheck", default="90d")
     sp.add_argument("--yes", action="store_true", help="accept defaults, no prompts")
 
-    sp = sub.add_parser("dream", help="build the deterministic maintenance worklist (drives /kb-dream)")
+    sp = sub.add_parser(
+        "dream", help="build the deterministic maintenance worklist (drives /librarian-dream)"
+    )
     _add_common(sp)
     sp.add_argument(
         "--mark-done",
@@ -341,7 +343,7 @@ def cmd_status(args, rep: Reporter) -> int:
     dream_wl = dream.from_catalog_json(data, cfg.dream_merge_similarity)
     dream_due, _dream_reason = dream.is_due(cfg, dream_wl)
     if dream_due:
-        attention.append(f"{dream_wl.total} maintenance item(s) ready — run /kb-dream")
+        attention.append(f"{dream_wl.total} maintenance item(s) ready — run /librarian-dream")
 
     if args.hook:
         if attention:
@@ -568,7 +570,8 @@ def cmd_dream(args, rep: Reporter) -> int:
             rep.say(f"    {x['path']}:{x['line']}")
     if due:
         rep.say(
-            "\nRun /kb-dream to draft proposals on a branch, or `librarian dream --mark-done` to dismiss."
+            "\nRun /librarian-dream to draft proposals on a branch, "
+            "or `librarian dream --mark-done` to dismiss."
         )
     return 1 if due else 0
 
