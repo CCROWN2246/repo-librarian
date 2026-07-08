@@ -165,6 +165,50 @@ class CliTests(CliCase):
         code, _, _ = self.run_sub("search", "zzz-no-match-zzz")
         self.assertEqual(code, 1)
 
+    def test_archive_moves_flips_and_reindexes(self):
+        self.write("docs/old.md", make_doc(id="old", status="draft", last_verified="2026-07-01"))
+        self.run_sub("index")
+        code, out, _ = self.run_sub("archive", "docs/old.md", "--json")
+        self.assertEqual(code, 0)
+        data = json.loads(out)
+        self.assertEqual(data["result"], "applied")
+        self.assertEqual(data["dest"], "_archive/old.md")
+        self.assertTrue(data["reindexed"])
+        self.assertFalse((self.root / "docs/old.md").exists())
+        self.assertIn("status: archived", self.read("_archive/old.md"))
+        # gone from the catalog (archive dir is excluded from the scan)
+        cat = json.loads(self.read("_index/catalog.json"))
+        self.assertNotIn("old", {e["id"] for e in cat["entries"]})
+
+    def test_archive_custom_dest(self):
+        self.write("docs/old.md", make_doc(id="old", status="draft"))
+        self.run_sub("index")
+        code, _, _ = self.run_sub("archive", "docs/old.md", "--to", "_archive/2026/old.md")
+        self.assertEqual(code, 0)
+        self.assertTrue((self.root / "_archive/2026/old.md").exists())
+
+    def test_archive_dry_run_writes_nothing(self):
+        self.write("docs/old.md", make_doc(id="old", status="draft"))
+        self.run_sub("index")
+        code, out, _ = self.run_sub("archive", "docs/old.md", "--dry-run", "--json")
+        self.assertEqual(code, 0)
+        self.assertTrue((self.root / "docs/old.md").exists())
+        self.assertFalse((self.root / "_archive/old.md").exists())
+
+    def test_archive_missing_doc_is_finding(self):
+        self.write("docs/present.md", make_doc())
+        self.run_sub("index")
+        code, _, _ = self.run_sub("archive", "docs/nope.md", "--json")
+        self.assertEqual(code, 1)  # stale: nothing to archive
+
+    def test_archive_idempotent_second_noop(self):
+        self.write("docs/old.md", make_doc(id="old", status="draft"))
+        self.run_sub("index")
+        self.run_sub("archive", "docs/old.md")
+        code, out, _ = self.run_sub("archive", "docs/old.md", "--json")
+        self.assertEqual(code, 0)
+        self.assertEqual(json.loads(out)["result"], "noop")
+
     def test_config_error_exit2(self):
         self.write(".librarian.toml", "schema_version = 1\n[bogus]\nx=1\n")
         code, _, err = self.run_sub("index")

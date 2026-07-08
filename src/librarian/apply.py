@@ -167,6 +167,16 @@ def _archive_move(cfg: Config, src_rel: str, dest_rel: str, status: str, dry: bo
     return APPLIED, f"archived {src_rel} -> {dest_rel} (status={status})"
 
 
+def archive_doc(
+    cfg: Config, path_rel: str, *, to: str | None = None, status: str = "archived", dry: bool = False
+) -> tuple[str, str, str]:
+    """Retire one doc (status flip + move). Shared by the archive proposal handler and
+    the direct `librarian archive` command. Returns (result, detail, dest_rel)."""
+    dest_rel = to or f"{cfg.archive_dir}/{Path(path_rel).name}"
+    result, detail = _archive_move(cfg, path_rel, dest_rel, status, dry)
+    return result, detail, dest_rel
+
+
 def _apply_archive(cfg: Config, p: proposals.Proposal, dry: bool) -> tuple[str, str]:
     tgt = p.targets[0]
     to = p.action.get("to")

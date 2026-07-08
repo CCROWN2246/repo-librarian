@@ -169,6 +169,14 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--path", dest="path_sub", help="filter to entries whose path contains this substring")
     sp.add_argument("-n", type=int, default=50, help="max results (default 50)")
 
+    sp = sub.add_parser(
+        "archive", help="retire a doc: flip status to archived, move to the archive dir, reindex"
+    )
+    _add_common(sp)
+    sp.add_argument("path", help="repo-relative path of the doc to archive")
+    sp.add_argument("--to", default=None, help="destination path (default: <archive_dir>/<basename>)")
+    sp.add_argument("--dry-run", action="store_true", help="report what would happen; write nothing")
+
     sp = sub.add_parser("apply", help="execute approved proposal objects against the working tree")
     _add_common(sp)
     g = sp.add_mutually_exclusive_group(required=True)
@@ -708,6 +716,50 @@ def cmd_query(args, rep: Reporter) -> int:
     return 0
 
 
+def _repo_rel(cfg: Config, given: str) -> str:
+    """Best-effort repo-relative path: prefer as-given (relative to root), else resolve
+    against cwd for a human running from a subdirectory."""
+    if cfg.path(given).exists():
+        return given
+    p = Path(given)
+    absp = (p if p.is_absolute() else Path.cwd() / p).resolve()
+    try:
+        return absp.relative_to(cfg.root.resolve()).as_posix()
+    except ValueError:
+        return given
+
+
+def cmd_archive(args, rep: Reporter) -> int:
+    cfg = _resolve_config(args)
+    rel = _repo_rel(cfg, args.path)
+    result, detail, dest = apply_engine.archive_doc(cfg, rel, to=args.to, dry=args.dry_run)
+    reindexed = False
+    if result == apply_engine.APPLIED and not args.dry_run:
+        res = _build_catalog(cfg)
+        render.write_all(cfg, res)
+        reindexed = True
+    if args.json:
+        rep.emit_json(
+            {
+                "result": result,
+                "detail": detail,
+                "path": rel,
+                "dest": dest,
+                "dry_run": args.dry_run,
+                "reindexed": reindexed,
+            }
+        )
+    else:
+        rep.say(f"  [{result}] {rel} -> {dest}: {detail}")
+        if reindexed:
+            rep.say("  reindexed. (reversible: git mv it back + flip status to un-retire)")
+    if result == apply_engine.ERROR:
+        return 2
+    if result in (apply_engine.STALE, apply_engine.REFUSED):
+        return 1
+    return 0
+
+
 def _commit_applied(cfg: Config, props, rep: Reporter) -> bool:
     """tier=commit: stage + commit the applied changes on the CURRENT branch (never
     main implicitly — the caller's branch is wherever they are). Best-effort."""
@@ -799,6 +851,7 @@ COMMANDS = {
     "ingest": cmd_ingest,
     "dream": cmd_dream,
     "query": cmd_query,
+    "archive": cmd_archive,
     "apply": cmd_apply,
     "doctor": cmd_doctor,
 }
