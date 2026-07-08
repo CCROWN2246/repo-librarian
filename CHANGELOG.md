@@ -5,7 +5,17 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
-### Added — Phase 2 (producer wiring + trust-ladder)
+### Added — Phase 2 (enrichment + trust-ladder + producer wiring)
+- **B5 enrichment + E2 auto-checks — the active-analyst loop.** `librarian enrich` is the deterministic
+  gap worklist: it surfaces **uncovered code/data files** and **dream-confirmed absence gaps**
+  (`resolve_absence` with `verdict: confirmed_gap`) plus the `[verify.sources]` available to fill them.
+  `/librarian-enrich` is the generative half: for each gap it queries a live source and drafts a
+  **provisional, source-verified** doc as an `enrich_create` proposal paired with an `add_check` (E2) that
+  re-verifies the fact on every `librarian verify`. Accuracy wall, enforced in the schema — an
+  `enrich_create` is **rejected** unless it carries non-empty `provenance.evidence` (the **empty-source
+  guard**, R1: a source that returned nothing can never justify drafting "we have zero X"). Provisional
+  docs are quarantined: flagged in STALENESS.md as "un-audited enrichment" once older than
+  `[enrich].provisional_ttl_days`.
 - **`librarian apply --auto`** — the trust-ladder consumer (B4). Applies proposals whose configured
   `[automation]` tier is `branch`/`commit`, reading the per-type tier from config as the pre-authorization
   (no per-item approval). Default is every type `off`, so `--auto` is a safe no-op until a type is opted

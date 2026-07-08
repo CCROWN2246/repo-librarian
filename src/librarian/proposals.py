@@ -236,7 +236,29 @@ def from_dict(d: dict, *, where: str = "proposal") -> Proposal:
             "the object was hand-edited or corrupted"
         )
     p.id = canonical
+    _validate_type_specifics(p, where)
     return p
+
+
+def _validate_type_specifics(p: Proposal, where: str) -> None:
+    """Per-type invariants beyond the shared shape. The accuracy wall for generation:
+    an enrich_create MUST carry non-empty source evidence (the empty-source guard, R1 —
+    a source that returned nothing can never justify drafting "we have zero X")."""
+    a = p.action
+    if p.type == "enrich_create":
+        _require(bool(a.get("new_path")), f"{where}: enrich_create requires action.new_path")
+        evidence = p.provenance.evidence
+        _require(
+            isinstance(evidence, str) and evidence.strip() != "",
+            f"{where}: enrich_create requires non-empty provenance.evidence — the live-source value "
+            "that justifies the draft. Empty/zero source => flag the gap, never draft (R1).",
+        )
+    elif p.type == "add_check":
+        chk = a.get("check")
+        _require(
+            isinstance(chk, dict) and bool(chk.get("id") or a.get("check_id")),
+            f"{where}: add_check requires action.check with an id",
+        )
 
 
 def make(

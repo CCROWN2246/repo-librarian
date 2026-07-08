@@ -20,6 +20,7 @@ from . import (
     config,
     doctor,
     dream,
+    enrich,
     ingest,
     proposals,
     registry,
@@ -180,6 +181,12 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("path", help="repo-relative path of the doc to archive")
     sp.add_argument("--to", default=None, help="destination path (default: <archive_dir>/<basename>)")
     sp.add_argument("--dry-run", action="store_true", help="report what would happen; write nothing")
+
+    sp = sub.add_parser(
+        "enrich",
+        help="list enrichable gaps (uncovered files + confirmed absences) — drives /librarian-enrich",
+    )
+    _add_common(sp)
 
     sp = sub.add_parser(
         "propose", help="append well-formed proposal object(s) to proposals.json (the dream producer)"
@@ -818,6 +825,30 @@ def cmd_archive(args, rep: Reporter) -> int:
     return 0
 
 
+def cmd_enrich(args, rep: Reporter) -> int:
+    cfg = _resolve_config(args)
+    res = _build_catalog(cfg)
+    gaps = enrich.detect_gaps(cfg, res, proposals.load(cfg))
+    sources = sorted(cfg.sources)
+    if args.json:
+        rep.emit_json({"count": len(gaps), "gaps": [g.to_dict() for g in gaps], "sources": sources})
+        return 1 if gaps else 0
+    if not gaps:
+        rep.say("no enrichable gaps — coverage is complete and no confirmed gaps are outstanding.")
+        return 0
+    rep.say(
+        f"enrichment worklist: {len(gaps)} gap(s). "
+        f"Sources available to query: {', '.join(sources) if sources else '(none configured)'}"
+    )
+    for g in gaps:
+        rep.say(f"  [{g.kind}] {g.ref} — {g.detail}")
+    rep.say(
+        "\nRun /librarian-enrich to draft provisional, source-verified docs (propose-only). "
+        "A gap with no non-empty source evidence is flagged, never drafted."
+    )
+    return 1
+
+
 def cmd_propose(args, rep: Reporter) -> int:
     cfg = _resolve_config(args)
     if args.file == "-":
@@ -893,7 +924,9 @@ def cmd_apply(args, rep: Reporter) -> int:
     all_props = proposals.load(cfg)
     if not all_props:
         return _apply_noop(
-            args, rep, f"no proposals in {cfg.index_dir}/{proposals.PROPOSALS_FILE} — run /librarian-dream first"
+            args,
+            rep,
+            f"no proposals in {cfg.index_dir}/{proposals.PROPOSALS_FILE} — run /librarian-dream first",
         )
 
     # In --auto mode the tier comes per-proposal from [automation] (config is the
@@ -982,6 +1015,7 @@ COMMANDS = {
     "query": cmd_query,
     "why": cmd_why,
     "archive": cmd_archive,
+    "enrich": cmd_enrich,
     "propose": cmd_propose,
     "apply": cmd_apply,
     "doctor": cmd_doctor,

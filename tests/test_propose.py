@@ -48,9 +48,22 @@ class BuildFromPartialTests(RepoCase):
             "type": "enrich_create",
             "targets": [{"path": "docs/new.md"}],
             "action": {"new_path": "docs/new.md", "body": "x"},
+            "provenance": {"command": "echo 3", "evidence": "3", "source": "warehouse"},
         }
         p = proposals.build_from_partial(cfg, partial)
         self.assertEqual(p.targets[0].base_sha256, "")  # not-yet-existing target
+
+    def test_enrich_create_empty_source_rejected(self):
+        # the empty-source guard (R1): no source evidence -> refuse to build the draft
+        cfg = self.cfg()
+        partial = {
+            "type": "enrich_create",
+            "targets": [{"path": "docs/new.md"}],
+            "action": {"new_path": "docs/new.md", "body": "x"},
+            "provenance": {"command": "echo ''", "source": "warehouse"},  # no evidence
+        }
+        with self.assertRaises(proposals.ProposalError):
+            proposals.build_from_partial(cfg, partial)
 
     def test_bad_type_rejected(self):
         cfg = self.cfg()

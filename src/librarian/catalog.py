@@ -154,6 +154,14 @@ def build(
             reasons.append("missing fields: " + ",".join(miss))
         if d.get("status") in ("provisional", "draft"):
             reasons.append("status=" + str(d["status"]))
+            # Enrichment quarantine (R1): a provisional doc unreviewed past the decay TTL
+            # is called out as un-audited so generated drafts can't quietly become furniture.
+            if d.get("status") == "provisional" and cfg.enrich_provisional_ttl_days > 0:
+                pv_age = _days_old(d.get("last_verified", ""), today)
+                if pv_age is not None and pv_age > cfg.enrich_provisional_ttl_days:
+                    reasons.append(
+                        f"un-audited enrichment {pv_age}d (> TTL {cfg.enrich_provisional_ttl_days}d)"
+                    )
         if str(d.get("has_disputed_claims", "")).lower() == "true":
             reasons.append("has disputed claims")
         rd = _recheck_days(d.get("recheck", ""))
