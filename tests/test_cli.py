@@ -209,6 +209,47 @@ class CliTests(CliCase):
         self.assertEqual(code, 0)
         self.assertEqual(json.loads(out)["result"], "noop")
 
+    def test_why_shows_provenance(self):
+        from librarian import verify
+
+        cfg = self.cfg()
+        verify.save_provenance(
+            cfg,
+            {
+                "dock_count": {
+                    "check_id": "dock_count",
+                    "doc": "docs/schema.md",
+                    "source": "warehouse",
+                    "command": "psql -c 'select count(*)'",
+                    "live": "17",
+                    "expect": "17",
+                    "status": "PASS",
+                    "verified_at": "2026-07-02",
+                }
+            },
+        )
+        code, out, _ = self.run_sub("why", "dock", "--json")
+        self.assertEqual(code, 0)
+        rec = json.loads(out)["records"][0]
+        self.assertEqual(rec["command"], "psql -c 'select count(*)'")
+        self.assertEqual(rec["live"], "17")
+        # human output surfaces the command + backing doc
+        code, out, _ = self.run_sub("why", "dock_count")
+        self.assertIn("command:", out)
+        self.assertIn("docs/schema.md", out)
+
+    def test_why_no_match_exit1(self):
+        from librarian import verify
+
+        verify.save_provenance(self.cfg(), {"x": {"check_id": "x", "doc": "d.md", "source": "s"}})
+        code, _, _ = self.run_sub("why", "nonexistent-fact", "--json")
+        self.assertEqual(code, 1)
+
+    def test_why_without_provenance_exit1(self):
+        self.cfg()
+        code, _, _ = self.run_sub("why", "--json")
+        self.assertEqual(code, 1)
+
     def test_config_error_exit2(self):
         self.write(".librarian.toml", "schema_version = 1\n[bogus]\nx=1\n")
         code, _, err = self.run_sub("index")

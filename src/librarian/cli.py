@@ -169,6 +169,10 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--path", dest="path_sub", help="filter to entries whose path contains this substring")
     sp.add_argument("-n", type=int, default=50, help="max results (default 50)")
 
+    sp = sub.add_parser("why", help="show the provenance for a verified fact (command, source, value, when)")
+    _add_common(sp)
+    sp.add_argument("terms", nargs="*", help="match against check id / doc / source / value (omit = all)")
+
     sp = sub.add_parser(
         "archive", help="retire a doc: flip status to archived, move to the archive dir, reindex"
     )
@@ -721,6 +725,39 @@ def cmd_query(args, rep: Reporter) -> int:
     return 0
 
 
+def cmd_why(args, rep: Reporter) -> int:
+    cfg = _resolve_config(args)
+    records = verify.load_provenance(cfg)  # keyed by check_id
+    if not records:
+        rep.say(f"no provenance yet — run `librarian verify` (writes {cfg.index_dir}/provenance.json)")
+        return 1
+    terms = [t.lower() for t in args.terms]
+    matched = []
+    for cid in sorted(records):
+        r = records[cid]
+        hay = " ".join(
+            str(r.get(k, "")) for k in ("check_id", "doc", "source", "live", "expect", "baseline")
+        ).lower()
+        if not terms or all(t in hay for t in terms):
+            matched.append(r)
+    if args.json:
+        rep.emit_json({"count": len(matched), "records": matched})
+        return 0 if matched else 1
+    if not matched:
+        rep.say("no matching verified fact — try a check id, doc path, or value; or `librarian verify`")
+        return 1
+    for r in matched:
+        rep.say(f"{r.get('check_id')} [{r.get('status')}]  (verified {r.get('verified_at', '?')})")
+        vals = [f"{k}={r[k]}" for k in ("live", "expect", "baseline") if r.get(k) is not None]
+        if vals:
+            rep.say("  fact:    " + " · ".join(vals))
+        rep.say(f"  source:  {r.get('source', '?')}")
+        if r.get("command"):
+            rep.say(f"  command: {r['command']}")
+        rep.say(f"  backs:   {r.get('doc', '?')}")
+    return 0
+
+
 def _repo_rel(cfg: Config, given: str) -> str:
     """Best-effort repo-relative path: prefer as-given (relative to root), else resolve
     against cwd for a human running from a subdirectory."""
@@ -856,6 +893,7 @@ COMMANDS = {
     "ingest": cmd_ingest,
     "dream": cmd_dream,
     "query": cmd_query,
+    "why": cmd_why,
     "archive": cmd_archive,
     "apply": cmd_apply,
     "doctor": cmd_doctor,

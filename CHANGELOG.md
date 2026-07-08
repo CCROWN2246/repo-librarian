@@ -5,6 +5,21 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
+### Added — Phase 1 (packaged commands) + provenance query
+- **B1 work-resumption nudge** — a throttled `UserPromptSubmit` hook (`.claude/hooks/librarian-prompt.sh`)
+  that nudges when you resume work, not just at cold session start. `librarian status --hook --throttle`
+  fast-paths on `_index/.last_nudge` and early-exits **before** loading catalog.json when inside the
+  work-block (`[hooks].nudge_throttle_minutes`, default 240; `0` disables). `init` now wires both
+  SessionStart and UserPromptSubmit hooks.
+- **B3 `librarian archive <path>`** — retire a doc: frontmatter status → archived, move into the archive
+  dir (excluded from the scan), reindex. Atomic, reversible (git mv back + un-flip), never deletes.
+  Shares its mover with the archive proposal handler.
+- **B3 retirement-detection dream job** — a fifth worklist bucket, `retirement_candidates`: docs an author
+  already marked with a terminal status (retired/superseded/shipped/…) but that still live in the docs
+  tree. Positive-evidence, **propose-only**; the dream agent turns them into reversible archive proposals.
+- **E3 `librarian why [terms]`** — prints the provenance chain for a verified fact (the command, source,
+  extracted value, timestamp, and backing doc) from `_index/provenance.json`. Pure stdlib.
+
 ### Added — Phase 0 (the automation spine)
 - **Proposal objects** (`_index/proposals.json`, `schema_version` 1) — a versioned, machine-applyable
   maintenance/generation unit that replaces the dream cycle's hand-retyped prose. Eight types
