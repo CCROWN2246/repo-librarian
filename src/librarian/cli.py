@@ -195,11 +195,18 @@ def build_parser() -> argparse.ArgumentParser:
     g = sp.add_mutually_exclusive_group(required=True)
     g.add_argument("--all", action="store_true", dest="all_", help="apply every approved proposal")
     g.add_argument("--only", nargs="+", metavar="ID", help="apply these proposal ids (ignores approval)")
+    g.add_argument(
+        "--auto",
+        action="store_true",
+        help="apply proposals whose configured [automation] tier is branch/commit "
+        "(default all-off = no-op); the trust-ladder pre-authorizes them, no per-item approval",
+    )
     sp.add_argument(
         "--tier",
         choices=["off", "branch", "commit"],
         default="off",
-        help="max trust-ladder tier (commit auto-commits; capped by each proposal's risk)",
+        help="for --all/--only: max tier (commit auto-commits; capped by each proposal's risk). "
+        "Ignored by --auto, which reads the per-type tier from [automation].",
     )
     sp.add_argument("--dry-run", action="store_true", help="report what would change; write nothing")
 
@@ -861,20 +868,56 @@ def _commit_applied(cfg: Config, props, rep: Reporter) -> bool:
         return False
 
 
+def _apply_noop(args, rep: Reporter, msg: str) -> int:
+    """Emit an empty apply result (JSON-aware) for the nothing-to-do early returns."""
+    if args.json:
+        rep.emit_json(
+            {
+                "dry_run": args.dry_run,
+                "auto": args.auto,
+                "tier": args.tier,
+                "applied": 0,
+                "reindexed": False,
+                "marked_done": False,
+                "committed": False,
+                "outcomes": [],
+            }
+        )
+    else:
+        rep.say(msg)
+    return 0
+
+
 def cmd_apply(args, rep: Reporter) -> int:
     cfg = _resolve_config(args)
     all_props = proposals.load(cfg)
     if not all_props:
-        rep.say(f"no proposals in {cfg.index_dir}/{proposals.PROPOSALS_FILE} — run /librarian-dream first")
-        return 0
+        return _apply_noop(
+            args, rep, f"no proposals in {cfg.index_dir}/{proposals.PROPOSALS_FILE} — run /librarian-dream first"
+        )
+
+    # In --auto mode the tier comes per-proposal from [automation] (config is the
+    # pre-authorization); otherwise from --tier over the selected/approved set.
+    def resolved_tier(p) -> str:
+        source = cfg.tier_for(p.type) if args.auto else args.tier
+        return proposals.effective_tier(p, source)
+
     only = set(args.only) if args.only else None
-    selected = apply_engine.select(all_props, only=only, all_approved=args.all_)
-    if only:
-        for m in sorted(only - {p.id for p in selected}):
-            rep.warn(f"no proposal with id {m}")
+    if args.auto:
+        selected = [p for p in all_props if resolved_tier(p) != "off"]
+    else:
+        selected = apply_engine.select(all_props, only=only, all_approved=args.all_)
+        if only:
+            for m in sorted(only - {p.id for p in selected}):
+                rep.warn(f"no proposal with id {m}")
     if not selected:
-        rep.say("nothing selected (no approved proposals, or --only matched none)")
-        return 0
+        return _apply_noop(
+            args,
+            rep,
+            "nothing auto-appliable — every proposal's [automation] tier is off (propose-only)"
+            if args.auto
+            else "nothing selected (no approved proposals, or --only matched none)",
+        )
 
     outcomes = [apply_engine.apply_one(cfg, p, dry_run=args.dry_run) for p in selected]
     by_id = {p.id: p for p in selected}
@@ -895,7 +938,7 @@ def cmd_apply(args, rep: Reporter) -> int:
     committable = [
         by_id[o.id]
         for o in outcomes
-        if o.result == apply_engine.APPLIED and proposals.effective_tier(by_id[o.id], args.tier) == "commit"
+        if o.result == apply_engine.APPLIED and resolved_tier(by_id[o.id]) == "commit"
     ]
     if committable and not args.dry_run:
         committed = _commit_applied(cfg, committable, rep)
@@ -904,6 +947,7 @@ def cmd_apply(args, rep: Reporter) -> int:
         rep.emit_json(
             {
                 "dry_run": args.dry_run,
+                "auto": args.auto,
                 "tier": args.tier,
                 "applied": sum(1 for o in outcomes if o.result == apply_engine.APPLIED),
                 "reindexed": applied_any and not args.dry_run,

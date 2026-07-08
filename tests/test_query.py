@@ -136,6 +136,36 @@ class ApplyCliTests(CliCase):
         self.assertIn("20.", self.read("docs/schema.md"))  # unchanged
         self.assertFalse((self.root / "_index" / "apply-log.jsonl").exists())
 
+    def test_auto_is_noop_under_default_off(self):
+        # trust-ladder default = every type off -> --auto applies nothing (the safe default)
+        self._seed_proposal(approved=False)
+        code, out, _ = self.run_sub("apply", "--auto", "--json")
+        self.assertEqual(code, 0)
+        self.assertEqual(json.loads(out)["applied"], 0)
+        self.assertIn("20.", self.read("docs/schema.md"))
+
+    def test_auto_applies_when_type_tier_opted_in(self):
+        # opt the fix type into branch tier -> --auto applies it WITHOUT per-item approval
+        self._seed_proposal(approved=False)
+        self.write(".librarian.toml", "schema_version = 1\n[automation]\nfix = 'branch'\n")
+        code, out, _ = self.run_sub("apply", "--auto", "--json")
+        self.assertEqual(code, 0)
+        data = json.loads(out)
+        self.assertTrue(data["auto"])
+        self.assertEqual(data["applied"], 1)
+        self.assertFalse(data["committed"])  # branch tier: apply but don't commit
+        self.assertIn("is 15.", self.read("docs/schema.md"))
+
+    def test_auto_respects_risk_cap(self):
+        # fix is an irreversible text edit -> capped at branch; config 'commit' can't lift it
+        self._seed_proposal(approved=False)
+        self.write(".librarian.toml", "schema_version = 1\n[automation]\nfix = 'commit'\n")
+        code, out, _ = self.run_sub("apply", "--auto", "--json")
+        self.assertEqual(code, 0)
+        data = json.loads(out)
+        self.assertEqual(data["applied"], 1)
+        self.assertFalse(data["committed"])  # capped to branch by cap_tier, never commits
+
 
 if __name__ == "__main__":
     unittest.main()

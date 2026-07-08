@@ -5,7 +5,11 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
-### Added — Phase 2 (producer wiring)
+### Added — Phase 2 (producer wiring + trust-ladder)
+- **`librarian apply --auto`** — the trust-ladder consumer (B4). Applies proposals whose configured
+  `[automation]` tier is `branch`/`commit`, reading the per-type tier from config as the pre-authorization
+  (no per-item approval). Default is every type `off`, so `--auto` is a safe no-op until a type is opted
+  in. The generative/irreversible/archive risk caps still bind — config can't lift a `fix` above `branch`.
 - **`librarian propose`** — the dream producer. Reads a partial proposal (type / target paths + optional
   line / action / rationale) as JSON on stdin or a file; the CLI fills each target's `base_sha256` (hashing
   the file as it is now), computes the id, applies the risk defaults, validates, and upserts into
