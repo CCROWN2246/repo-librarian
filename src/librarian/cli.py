@@ -36,6 +36,19 @@ from .output import Reporter, tag
 from .proposals import ProposalError
 
 STALE_VERIFY_DAYS = 7
+NUDGE_FILE = ".last_nudge"  # epoch stamp throttling the UserPromptSubmit work-resumption nudge
+
+
+def _read_epoch(path: Path) -> int | None:
+    try:
+        return int(path.read_text().strip())
+    except (OSError, ValueError):
+        return None
+
+
+def _write_epoch(path: Path, value: float) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(str(int(value)), encoding="utf-8")
 
 
 def _add_common(p: argparse.ArgumentParser, *, json_flag: bool = True) -> None:
@@ -100,6 +113,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--hook",
         action="store_true",
         help="hook mode: silent when clean, one-line nudge otherwise, always exit 0",
+    )
+    sp.add_argument(
+        "--throttle",
+        action="store_true",
+        help="UserPromptSubmit mode: fast-path early-exit within the work-block "
+        "([hooks].nudge_throttle_minutes) BEFORE loading catalog.json",
     )
 
     sp = sub.add_parser("search", help="rank catalog entries for a task phrase")
@@ -335,6 +354,20 @@ def _catalog_token_estimate(cfg: Config) -> int:
 
 def cmd_status(args, rep: Reporter) -> int:
     cfg = _resolve_config(args)
+    if args.hook:
+        # The work-block throttle. --throttle (UserPromptSubmit) early-exits BEFORE any
+        # catalog load if we nudged within the window; SessionStart (--hook alone) always
+        # runs but still stamps, so the prompts right after it stay quiet. One full check
+        # per window, max — the hook never pays the catalog-load tax on every prompt.
+        nudge_path = cfg.path(cfg.index_dir) / NUDGE_FILE
+        window = cfg.nudge_throttle_minutes * 60
+        if args.throttle:
+            if window <= 0:
+                return 0  # work-resumption nudge disabled ([hooks].nudge_throttle_minutes = 0)
+            last = _read_epoch(nudge_path)
+            if last is not None and (time.time() - last) < window:
+                return 0
+        _write_epoch(nudge_path, time.time())
     data = _load_catalog_json(cfg)
     if data is None:
         # status never rebuilds (it must stay cheap for the hook) — it reports on what exists.

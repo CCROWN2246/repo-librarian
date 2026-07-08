@@ -20,6 +20,7 @@ MARKER_END = "<!-- librarian:end -->"
 MANIFEST = ".scaffold.json"
 
 HOOK_COMMAND = "bash .claude/hooks/librarian-session.sh"
+PROMPT_HOOK_COMMAND = "bash .claude/hooks/librarian-prompt.sh"
 
 
 @dataclass
@@ -146,6 +147,17 @@ def _apply_block(root: Path, rel: str, content: str, manifest: dict, report: Ini
         manifest["blocks"].append(rel)
 
 
+def _merge_hook(hooks: dict, event: str, command: str) -> bool:
+    """Append a command hook to `event` if absent. Returns True if it was added."""
+    entries = hooks.setdefault(event, [])
+    for entry in entries:
+        for h in entry.get("hooks", []):
+            if h.get("command") == command:
+                return False
+    entries.append({"hooks": [{"type": "command", "command": command}]})
+    return True
+
+
 def _merge_claude_settings(root: Path, report: InitReport) -> None:
     path = root / ".claude" / "settings.json"
     settings: dict = {}
@@ -154,21 +166,22 @@ def _merge_claude_settings(root: Path, report: InitReport) -> None:
             settings = json.loads(path.read_text(encoding="utf-8"))
         except json.JSONDecodeError:
             report.notes.append(
-                ".claude/settings.json is not valid JSON — hook NOT merged; "
-                f"add a SessionStart hook running `{HOOK_COMMAND}` manually"
+                ".claude/settings.json is not valid JSON — hooks NOT merged; add a SessionStart "
+                f"hook (`{HOOK_COMMAND}`) and a UserPromptSubmit hook (`{PROMPT_HOOK_COMMAND}`) manually"
             )
             return
     hooks = settings.setdefault("hooks", {})
-    session = hooks.setdefault("SessionStart", [])
-    for entry in session:
-        for h in entry.get("hooks", []):
-            if h.get("command") == HOOK_COMMAND:
-                report.skipped.append(".claude/settings.json (hook already present)")
-                return
-    session.append({"hooks": [{"type": "command", "command": HOOK_COMMAND}]})
+    merged = []
+    if _merge_hook(hooks, "SessionStart", HOOK_COMMAND):
+        merged.append("SessionStart")
+    if _merge_hook(hooks, "UserPromptSubmit", PROMPT_HOOK_COMMAND):
+        merged.append("UserPromptSubmit")
+    if not merged:
+        report.skipped.append(".claude/settings.json (hooks already present)")
+        return
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(settings, indent=2) + "\n", encoding="utf-8")
-    report.updated.append(".claude/settings.json (SessionStart hook merged)")
+    report.updated.append(f".claude/settings.json ({' + '.join(merged)} hook(s) merged)")
 
 
 def init(root: Path, *, agent: str = "both", index_dir: str = "_index", upgrade: bool = False) -> InitReport:
@@ -226,6 +239,15 @@ def init(root: Path, *, agent: str = "both", index_dir: str = "_index", upgrade:
             root,
             ".claude/hooks/librarian-session.sh",
             _asset("claude/librarian-session.sh"),
+            manifest,
+            report,
+            upgrade=upgrade,
+            executable=True,
+        )
+        _write_managed(
+            root,
+            ".claude/hooks/librarian-prompt.sh",
+            _asset("claude/librarian-prompt.sh"),
             manifest,
             report,
             upgrade=upgrade,

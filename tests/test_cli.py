@@ -2,6 +2,7 @@ import contextlib
 import io
 import json
 import os
+import time
 import unittest
 
 from helpers import RepoCase, make_doc
@@ -88,6 +89,55 @@ class CliTests(CliCase):
         code, out, _ = self.run_sub("status", "--hook")
         self.assertEqual(code, 0)
         self.assertIn("awaiting intake", out)
+
+    def _seed_attention(self):
+        # an inbox item makes status non-clean, so the hook has something to nudge about
+        self.write("docs/a.md", make_doc(last_verified="2026-07-01"))
+        self.write("_inbox/raw.md", "x\n")
+        self.run_sub("index")
+
+    def test_throttle_nudges_then_silent_within_window(self):
+        self._seed_attention()
+        code, out, _ = self.run_sub("status", "--hook", "--throttle")
+        self.assertEqual(code, 0)
+        self.assertIn("awaiting intake", out)  # first prompt of the block nudges
+        code, out, _ = self.run_sub("status", "--hook", "--throttle")
+        self.assertEqual(code, 0)
+        self.assertEqual(out.strip(), "")  # within the work-block: silent
+        self.assertTrue((self.root / "_index" / ".last_nudge").exists())
+
+    def test_throttle_fast_paths_before_catalog_load(self):
+        self._seed_attention()
+        self.run_sub("status", "--hook", "--throttle")  # stamps .last_nudge
+        (self.root / "_index" / "catalog.json").unlink()  # would error if it tried to load+report
+        code, out, _ = self.run_sub("status", "--hook", "--throttle")
+        self.assertEqual(code, 0)
+        self.assertEqual(out.strip(), "")  # early-exit, never touched catalog.json
+
+    def test_throttle_re_nudges_on_work_resumption(self):
+        self._seed_attention()
+        self.run_sub("status", "--hook", "--throttle")
+        # backdate the stamp beyond the window (default 240 min) -> resumed work
+        nudge = self.root / "_index" / ".last_nudge"
+        nudge.write_text(str(int(time.time()) - 240 * 60 - 10), encoding="utf-8")
+        code, out, _ = self.run_sub("status", "--hook", "--throttle")
+        self.assertEqual(code, 0)
+        self.assertIn("awaiting intake", out)  # re-nudges after the idle gap
+
+    def test_throttle_disabled_when_zero(self):
+        self._seed_attention()
+        self.write(".librarian.toml", "schema_version = 1\n[hooks]\nnudge_throttle_minutes = 0\n")
+        self.run_sub("index")
+        code, out, _ = self.run_sub("status", "--hook", "--throttle")
+        self.assertEqual(code, 0)
+        self.assertEqual(out.strip(), "")  # UserPromptSubmit nudge disabled
+
+    def test_sessionstart_hook_still_nudges_and_stamps(self):
+        self._seed_attention()
+        code, out, _ = self.run_sub("status", "--hook")  # no --throttle
+        self.assertEqual(code, 0)
+        self.assertIn("awaiting intake", out)
+        self.assertTrue((self.root / "_index" / ".last_nudge").exists())
 
     def test_catalog_token_budget_warning(self):
         self.write("docs/a.md", make_doc(last_verified="2026-07-01"))

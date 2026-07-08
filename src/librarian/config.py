@@ -124,6 +124,8 @@ class Config:
     automation_tiers: dict[str, str] = field(default_factory=dict)
     # enrichment
     enrich_provisional_ttl_days: int = 30  # a provisional doc unreviewed past this is flagged
+    # hooks (the UserPromptSubmit work-resumption nudge)
+    nudge_throttle_minutes: int = 240  # re-check + nudge at most once per this many minutes (0 = off)
     # agent
     agent_claude: bool = True
     agent_agents_md: bool = True
@@ -387,6 +389,9 @@ def load(root: Path) -> Config:
 
     enrich = _take(data.pop("enrich", {}), "[enrich]", {"provisional_ttl_days": int})
     cfg.enrich_provisional_ttl_days = enrich.get("provisional_ttl_days", cfg.enrich_provisional_ttl_days)
+
+    hooks = _take(data.pop("hooks", {}), "[hooks]", {"nudge_throttle_minutes": int})
+    cfg.nudge_throttle_minutes = hooks.get("nudge_throttle_minutes", cfg.nudge_throttle_minutes)
 
     agent = _take(data.pop("agent", {}), "[agent]", {"claude": bool, "agents_md": bool})
     cfg.agent_claude = agent.get("claude", cfg.agent_claude)

@@ -70,6 +70,12 @@ schema_version = 1
 # provisional_ttl_days = 30                # a provisional (enriched) doc unreviewed past this
 #                                          # many days is flagged in STALENESS.md
 
+[hooks]
+# The UserPromptSubmit hook nudges when you RESUME work (not just at session start),
+# throttled so a busy prompt stream pays no catalog-load cost. It re-checks + nudges at
+# most once per this many minutes; a longer idle gap (lunch, next morning) re-arms it.
+# nudge_throttle_minutes = 240             # 0 = disable the work-resumption nudge
+
 [agent]
 # claude = true                            # scaffold .claude/ glue on init
 # agents_md = true                         # maintain the managed block in AGENTS.md

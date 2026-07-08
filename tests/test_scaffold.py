@@ -91,6 +91,9 @@ class InitTests(ScaffoldCase):
         self.assertTrue(
             any(scaffold.HOOK_COMMAND in json.dumps(e) for e in settings["hooks"]["SessionStart"])
         )
+        self.assertTrue(
+            any(scaffold.PROMPT_HOOK_COMMAND in json.dumps(e) for e in settings["hooks"]["UserPromptSubmit"])
+        )
 
     def test_init_never_overwrites_modified_config(self):
         scaffold.init(self.root)
