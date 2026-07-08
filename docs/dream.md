@@ -46,7 +46,7 @@ run /librarian-dream" — computed cheaply from `catalog.json`, no extra filesys
 ## What `/librarian-dream` does (propose-only, on a branch)
 
 1. Runs `librarian dream --json`. **If not due, it stops** — no branch, no tokens.
-2. Creates `kb/dream-<date>` and does the judgment work for each non-empty bucket:
+2. Creates `librarian/dream-<date>` and does the judgment work for each non-empty bucket:
    conflict resolutions (with exact replacement text), merge plans (canonical + what to preserve),
    `read_when` proposals, absence-claim audits.
 3. Writes everything to `MORNING-REPORT.md` and commits **only that** to the branch. Main is never

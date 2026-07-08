@@ -15,12 +15,14 @@ from pathlib import Path
 
 from . import (
     __version__,
+    apply as apply_engine,
     backfill,
     catalog,
     config,
     doctor,
     dream,
     ingest,
+    proposals,
     registry,
     render,
     scaffold,
@@ -28,6 +30,7 @@ from . import (
     verify,
 )
 from .config import Config, ConfigError
+from .proposals import ProposalError
 from .output import Reporter, tag
 
 STALE_VERIFY_DAYS = 7
@@ -132,6 +135,31 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="stamp the current worklist as reviewed (resets the 'dream is due' nudge)",
     )
+
+    sp = sub.add_parser(
+        "query", help="retrieve catalog pointers (id/path/freshness) by filter — pure stdlib, no bodies"
+    )
+    _add_common(sp)
+    sp.add_argument("terms", nargs="*", help="optional phrase; every term must appear in an entry")
+    sp.add_argument("--domain", help="filter to this domain (exact, case-insensitive)")
+    sp.add_argument("--status", help="filter to this status (exact)")
+    sp.add_argument("--tag", help="filter to entries carrying this tag")
+    sp.add_argument("--id", dest="id_exact", help="filter to this exact id")
+    sp.add_argument("--path", dest="path_sub", help="filter to entries whose path contains this substring")
+    sp.add_argument("-n", type=int, default=50, help="max results (default 50)")
+
+    sp = sub.add_parser("apply", help="execute approved proposal objects against the working tree")
+    _add_common(sp)
+    g = sp.add_mutually_exclusive_group(required=True)
+    g.add_argument("--all", action="store_true", dest="all_", help="apply every approved proposal")
+    g.add_argument("--only", nargs="+", metavar="ID", help="apply these proposal ids (ignores approval)")
+    sp.add_argument(
+        "--tier",
+        choices=["off", "branch", "commit"],
+        default="off",
+        help="max trust-ladder tier (commit auto-commits; capped by each proposal's risk)",
+    )
+    sp.add_argument("--dry-run", action="store_true", help="report what would change; write nothing")
 
     sp = sub.add_parser("doctor", help="sanity-check config, registry, hooks, and verify sources")
     _add_common(sp)
@@ -240,6 +268,7 @@ def cmd_verify(args, rep: Reporter) -> int:
     actions: list[str] = []
     if not args.dry_run:
         verify.stamp_last_verified(cfg)
+        verify.update_provenance(cfg, run, config.today())
         if args.update_baselines:
             actions += verify.update_baselines(cfg, run, config.today())
         if args.stamp or cfg.stamp_docs:
@@ -576,6 +605,154 @@ def cmd_dream(args, rep: Reporter) -> int:
     return 1 if due else 0
 
 
+def cmd_query(args, rep: Reporter) -> int:
+    cfg = _resolve_config(args)
+    data = _load_catalog_json(cfg)
+    if data is None:
+        res = _build_catalog(cfg)
+        render.write_all(cfg, res)
+        data = json.loads(render.catalog_json(res))
+    stale_ids = {s.get("id") for s in data.get("flags", {}).get("stale", [])}
+    terms = [t.lower() for t in args.terms]
+    dom = args.domain.lower() if args.domain else None
+    out = []
+    for e in data.get("entries", []):
+        if dom and str(e.get("domain", "")).lower() != dom:
+            continue
+        if args.status and str(e.get("status", "")) != args.status:
+            continue
+        if args.tag and args.tag not in [str(x) for x in e.get("tags", [])]:
+            continue
+        if args.id_exact and str(e.get("id", "")) != args.id_exact:
+            continue
+        if args.path_sub and args.path_sub not in str(e.get("path", "")):
+            continue
+        if terms:
+            hay = " ".join(
+                [
+                    str(e.get("title", "")),
+                    str(e.get("id", "")),
+                    str(e.get("domain", "")),
+                    " ".join(str(x) for x in e.get("tags", [])),
+                    " ".join(str(x) for x in e.get("read_when", [])),
+                ]
+            ).lower()
+            if not all(t in hay for t in terms):
+                continue
+        out.append(e)
+    out.sort(key=lambda e: str(e.get("path", "")))
+    out = out[: args.n]
+    rows = [
+        {
+            "id": e.get("id"),
+            "title": e.get("title"),
+            "path": e.get("path"),
+            "domain": e.get("domain"),
+            "status": e.get("status"),
+            "authority": e.get("authority"),
+            "last_verified": e.get("last_verified"),
+            "read_when": e.get("read_when", []),
+            "tags": e.get("tags", []),
+            "kind": e.get("kind"),
+            "stale": e.get("id") in stale_ids,
+        }
+        for e in out
+    ]
+    if args.json:
+        rep.emit_json({"count": len(rows), "results": rows})
+        return 0 if rows else 1
+    if not rows:
+        rep.say("no catalog entries match — refine the filter, or `librarian index` to refresh")
+        return 1
+    for r in rows:
+        flag = " [STALE]" if r["stale"] else ""
+        rep.say(
+            f"  {str(r['id']):28} {str(r['path']):44} "
+            f"status={r['status']} verified={r['last_verified'] or '-'}{flag}"
+        )
+    return 0
+
+
+def _commit_applied(cfg: Config, props, rep: Reporter) -> bool:
+    """tier=commit: stage + commit the applied changes on the CURRENT branch (never
+    main implicitly — the caller's branch is wherever they are). Best-effort."""
+    import subprocess
+
+    ids = " ".join(p.id for p in props)
+    msg = f"chore(librarian): apply {len(props)} proposal(s)\n\n{ids}"
+    try:
+        subprocess.run(["git", "-C", str(cfg.root), "add", "-A"], check=True, capture_output=True)
+        subprocess.run(["git", "-C", str(cfg.root), "commit", "-m", msg], check=True, capture_output=True)
+        return True
+    except (subprocess.CalledProcessError, OSError) as e:
+        rep.warn(f"tier=commit but git commit failed: {e}")
+        return False
+
+
+def cmd_apply(args, rep: Reporter) -> int:
+    cfg = _resolve_config(args)
+    all_props = proposals.load(cfg)
+    if not all_props:
+        rep.say(f"no proposals in {cfg.index_dir}/{proposals.PROPOSALS_FILE} — run /librarian-dream first")
+        return 0
+    only = set(args.only) if args.only else None
+    selected = apply_engine.select(all_props, only=only, all_approved=args.all_)
+    if only:
+        for m in sorted(only - {p.id for p in selected}):
+            rep.warn(f"no proposal with id {m}")
+    if not selected:
+        rep.say("nothing selected (no approved proposals, or --only matched none)")
+        return 0
+
+    outcomes = [apply_engine.apply_one(cfg, p, dry_run=args.dry_run) for p in selected]
+    by_id = {p.id: p for p in selected}
+    if not args.dry_run:
+        apply_engine.log_outcomes(cfg, outcomes)
+
+    applied_any = any(o.result == apply_engine.APPLIED for o in outcomes)
+    marked_done = False
+    if applied_any and not args.dry_run:
+        res = _build_catalog(cfg)
+        render.write_all(cfg, res)
+        wl = dream.from_catalog_result(res, cfg.dream_merge_similarity)
+        if wl.empty:  # never blanket-mark-done after a partial apply (eng-review C3)
+            dream.mark_done(cfg, wl)
+            marked_done = True
+
+    committed = False
+    committable = [
+        by_id[o.id]
+        for o in outcomes
+        if o.result == apply_engine.APPLIED and proposals.effective_tier(by_id[o.id], args.tier) == "commit"
+    ]
+    if committable and not args.dry_run:
+        committed = _commit_applied(cfg, committable, rep)
+
+    if args.json:
+        rep.emit_json(
+            {
+                "dry_run": args.dry_run,
+                "tier": args.tier,
+                "applied": sum(1 for o in outcomes if o.result == apply_engine.APPLIED),
+                "reindexed": applied_any and not args.dry_run,
+                "marked_done": marked_done,
+                "committed": committed,
+                "outcomes": [o.to_dict() for o in outcomes],
+            }
+        )
+    else:
+        for o in outcomes:
+            rep.say(f"  [{o.result}] {o.type} {o.id} — {o.detail}")
+        if marked_done:
+            rep.say("  worklist now empty — dream nudge reset")
+        if committed:
+            rep.say(f"  committed {len(committable)} proposal(s) at tier=commit")
+    needs_attention = any(
+        o.result in (apply_engine.STALE, apply_engine.ERROR, apply_engine.REFUSED) for o in outcomes
+    )
+    return 1 if needs_attention else 0
+
+
 COMMANDS = {
     "init": cmd_init,
     "index": cmd_index,
@@ -586,6 +763,8 @@ COMMANDS = {
     "backfill": cmd_backfill,
     "ingest": cmd_ingest,
     "dream": cmd_dream,
+    "query": cmd_query,
+    "apply": cmd_apply,
     "doctor": cmd_doctor,
 }
 
@@ -595,7 +774,7 @@ def main(argv: list[str] | None = None) -> int:
     rep = Reporter(as_json=getattr(args, "json", False), quiet=args.quiet)
     try:
         return COMMANDS[args.command](args, rep)
-    except ConfigError as e:
+    except (ConfigError, ProposalError) as e:
         rep.error(str(e))
         return 2
     except KeyboardInterrupt:

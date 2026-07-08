@@ -5,6 +5,35 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
+### Added — Phase 0 (the automation spine)
+- **Proposal objects** (`_index/proposals.json`, `schema_version` 1) — a versioned, machine-applyable
+  maintenance/generation unit that replaces the dream cycle's hand-retyped prose. Eight types
+  (`fix`/`ack`/`archive`/`merge`/`set_read_when`/`resolve_absence`/`enrich_create`/`add_check`); each
+  carries a per-file `base_sha256` staleness guard and a content-derived `id` that dedupes re-drafts.
+  This is a **compatibility surface** — treat like STALENESS.md line 3.
+- **`librarian apply [--all | --only <id>…] [--tier] [--dry-run]`** — executes proposals against the
+  working tree: per-target staleness gate (refuses if any file changed since draft), an idempotent
+  fix truth-table (run-twice = zero diff), a `_index/apply-log.jsonl` audit trail, a single reindex,
+  and `dream --mark-done` **only** when the post-apply worklist is empty. Never touches main, never
+  deletes (archive/merge = move + status flip).
+- **`librarian query [terms] [--domain/--status/--tag/--id/--path] [--json]`** — pure-stdlib catalog
+  retrieval returning pointers + freshness (path, status, `last_verified`, stale flag), not bodies.
+  The token-cost-flip primitive the Phase-3 MCP server will wrap.
+- **Provenance persistence** (`_index/provenance.json`, committed, sorted-keys) — `verify` now records
+  fact → command/source/value/timestamp per non-SKIP check (merges across filtered runs; prunes
+  orphans). Feeds the future `librarian why`, MCP sourced answers, and enrichment labels.
+- **`[automation]` trust-ladder config** (per-type tier, default `off`/propose-only; strict validation)
+  and **`[enrich].provisional_ttl_days`**. Generative/irreversible/archive proposals are hard-capped at
+  `branch` regardless of config; nothing reaches main via tier alone.
+- **Machine-generated verify checks** — `add_check` proposals write `_index/generated-checks.json`
+  (stdlib JSON; `tomllib` is read-only); `config.load` merges the sidecar after the hand-written TOML
+  checks, with human checks winning on id collision.
+
+### Changed
+- **B6 vocab cleanup** — dream branches are now `librarian/dream-<date>` (was `kb/dream-`) and the
+  report commit is `chore(librarian):` (was `chore(kb):`). The `KB-CONTRADICTED`/`KB-ACK` conflict
+  markers are unchanged — they are an on-disk data format in consuming repos' doc bodies.
+
 ## [0.3.0] - 2026-07-07
 
 ### Changed

@@ -23,7 +23,7 @@ non-empty ones.
 
 ## Step 1 — isolate on a branch
 ```
-git switch -c kb/dream-$(date +%Y%m%d) 2>/dev/null || git switch -c kb/dream-$(date +%Y%m%d)-2
+git switch -c librarian/dream-$(date +%Y%m%d) 2>/dev/null || git switch -c librarian/dream-$(date +%Y%m%d)-2
 ```
 If the repo isn't clean, stash or abort with a note — never mix the user's WIP into a dream branch.
 Everything below happens on this branch. **Do not touch files on main.**
@@ -62,7 +62,7 @@ the ones you agree with, then `librarian index` (and `librarian dream --mark-don
 nudge). Commit only the report (and any report-adjacent scratch) to the branch:
 
 ```
-git add MORNING-REPORT.md && git commit -m "chore(kb): dream-cycle proposals $(date +%Y-%m-%d)"
+git add MORNING-REPORT.md && git commit -m "chore(librarian): dream-cycle proposals $(date +%Y-%m-%d)"
 ```
 
 ## Step 4 — reset the nudge, report honestly

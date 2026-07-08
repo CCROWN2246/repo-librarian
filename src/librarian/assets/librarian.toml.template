@@ -55,6 +55,21 @@ schema_version = 1
 # nudge_after_days = 14                    # re-nudge on the SAME items after N days (0 = off)
 # merge_similarity = 0.6                   # metadata overlap (0-1) to flag a merge candidate
 
+[automation]
+# The trust-ladder: which proposal types `librarian apply` may auto-apply. Default for
+# EVERY type is "off" (propose-only) — auto-apply is strictly opt-in. Tiers:
+#   off    = propose only; a human runs `librarian apply`
+#   branch = auto-apply to the dream branch (human reviews + merges)
+#   commit = auto-apply AND commit to the dream branch (never main by default)
+# Hard caps override this: generative (enrich_create) and irreversible (fix/merge) proposals,
+# and archive/merge, can never exceed "branch"; nothing writes to main via tier alone.
+# fix = "off"                              # keys: fix ack archive merge set_read_when
+# ack = "branch"                           #       resolve_absence enrich_create add_check
+
+[enrich]
+# provisional_ttl_days = 30                # a provisional (enriched) doc unreviewed past this
+#                                          # many days is flagged in STALENESS.md
+
 [agent]
 # claude = true                            # scaffold .claude/ glue on init
 # agents_md = true                         # maintain the managed block in AGENTS.md
