@@ -29,6 +29,8 @@ from .config import Check, Config, Source
 
 SKIP_EXIT_CODE = 3
 BASELINES_FILE = "baselines.json"
+PROVENANCE_FILE = "provenance.json"
+PROVENANCE_SCHEMA = 1
 LAST_VERIFIED_FILE = ".last_verified"
 
 STATUS_ORDER = ["DRIFT", "ERROR", "CHANGED", "NEW", "SKIP", "PASS", "OK"]
@@ -194,6 +196,65 @@ def update_baselines(cfg: Config, run_result: RunResult, today: date) -> list[st
     if actions:
         save_baselines(cfg, baselines)
     return actions
+
+
+def load_provenance(cfg: Config) -> dict:
+    """The persisted provenance chain, keyed by check_id. Feeds `librarian why`,
+    MCP sourced answers, and enrichment labels (E2/E3/E1/B5). Missing -> {}."""
+    path = cfg.path(cfg.index_dir) / PROVENANCE_FILE
+    if not path.is_file():
+        return {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return {}
+    return {r["check_id"]: r for r in data.get("records", []) if isinstance(r, dict) and r.get("check_id")}
+
+
+def save_provenance(cfg: Config, records: dict) -> None:
+    out = cfg.path(cfg.index_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "schema_version": PROVENANCE_SCHEMA,
+        "records": [records[k] for k in sorted(records)],
+    }
+    # sort_keys like baselines.json -> stable, minimal-diff serialization (committed file).
+    (out / PROVENANCE_FILE).write_text(
+        json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+
+
+def update_provenance(cfg: Config, run_result: RunResult, today: date) -> None:
+    """Persist one provenance record per non-SKIP check (fact -> command/source/value/
+    timestamp). MERGES: only check_ids present in this run are refreshed, so a filtered
+    `verify --source X` never wipes other sources. Orphaned records are pruned."""
+    records = load_provenance(cfg)
+    by_id = {c.id: c for c in cfg.checks}
+    for r in run_result.results:
+        if r.status == "SKIP":
+            continue
+        check = by_id.get(r.id)
+        source = cfg.sources.get(check.source) if check else None
+        try:
+            command = _resolve_cmd(check, source) if check else None
+        except (AssertionError, AttributeError):
+            command = None
+        rec = {
+            "check_id": r.id,
+            "doc": r.doc,
+            "source": r.source,
+            "kind": r.kind,
+            "command": command,
+            "live": r.live,
+            "baseline": r.baseline,
+            "expect": r.expect,
+            "status": r.status,
+            "verified_at": today.isoformat(),
+        }
+        records[r.id] = {k: v for k, v in rec.items() if v is not None}
+    for orphan in set(records) - set(by_id):
+        del records[orphan]
+    save_provenance(cfg, records)
 
 
 def stamp_last_verified(cfg: Config) -> None:

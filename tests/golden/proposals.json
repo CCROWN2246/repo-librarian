@@ -1,0 +1,259 @@
+{
+  "proposals": [
+    {
+      "action": {
+        "read_when": [
+          "when onboarding",
+          "before touching ETL"
+        ]
+      },
+      "approved": false,
+      "id": "p_251ecbd344ce",
+      "provenance": {
+        "drafted_at": "2026-07-08",
+        "drafted_by": "librarian-dream",
+        "source": "worklist:open_conflicts"
+      },
+      "rationale": "empty routing phrase",
+      "risk": {
+        "generative": false,
+        "reversible": true,
+        "writes_to": "branch"
+      },
+      "schema_version": "1",
+      "targets": [
+        {
+          "base_sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+          "path": "docs/routing.md"
+        }
+      ],
+      "type": "set_read_when"
+    },
+    {
+      "action": {
+        "filled_by": "docs/answer.md",
+        "verdict": "stale_claim"
+      },
+      "approved": false,
+      "id": "p_36e563e7ecc6",
+      "provenance": {
+        "drafted_at": "2026-07-08",
+        "drafted_by": "librarian-dream",
+        "source": "worklist:open_conflicts"
+      },
+      "rationale": "the KB actually answers this",
+      "risk": {
+        "generative": false,
+        "reversible": true,
+        "writes_to": "branch"
+      },
+      "schema_version": "1",
+      "targets": [
+        {
+          "base_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+          "line": 4,
+          "path": "docs/gaps.md"
+        }
+      ],
+      "type": "resolve_absence"
+    },
+    {
+      "action": {
+        "mark": "KB-ACK"
+      },
+      "approved": false,
+      "id": "p_3f9bfb66b03c",
+      "provenance": {
+        "drafted_at": "2026-07-08",
+        "drafted_by": "librarian-dream",
+        "source": "worklist:open_conflicts"
+      },
+      "rationale": "transcript \u2014 keep verbatim",
+      "risk": {
+        "generative": false,
+        "reversible": true,
+        "writes_to": "branch"
+      },
+      "schema_version": "1",
+      "targets": [
+        {
+          "base_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "line": 8,
+          "path": "docs/interview.md"
+        }
+      ],
+      "type": "ack"
+    },
+    {
+      "action": {
+        "drop_marker": true,
+        "replace": {
+          "new": "17 stations",
+          "old": "20 stations"
+        }
+      },
+      "approved": false,
+      "id": "p_41fc178d399b",
+      "provenance": {
+        "drafted_at": "2026-07-08",
+        "drafted_by": "librarian-dream",
+        "source": "worklist:open_conflicts"
+      },
+      "rationale": "min dock count is 15, not 20",
+      "risk": {
+        "generative": false,
+        "reversible": false,
+        "writes_to": "branch"
+      },
+      "schema_version": "1",
+      "targets": [
+        {
+          "base_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "line": 12,
+          "path": "docs/schema.md"
+        }
+      ],
+      "type": "fix"
+    },
+    {
+      "action": {
+        "body": "# Backup coverage\n\nprovisional draft\n",
+        "domain": "ops",
+        "frontmatter": {
+          "domain": "ops",
+          "id": "ops-backup",
+          "status": "provisional",
+          "title": "Backup coverage"
+        },
+        "new_path": "docs/ops/backup.md",
+        "spawns_check": "backup_coverage",
+        "status": "provisional"
+      },
+      "approved": false,
+      "id": "p_7977b4cfb87b",
+      "provenance": {
+        "command": "psql -c 'select 1'",
+        "drafted_at": "2026-07-08",
+        "drafted_by": "librarian-enrich",
+        "evidence": "3 tables",
+        "source": "catalog-gap"
+      },
+      "rationale": "gap: no backup-coverage doc",
+      "risk": {
+        "generative": true,
+        "reversible": true,
+        "writes_to": "branch"
+      },
+      "schema_version": "1",
+      "targets": [
+        {
+          "base_sha256": "",
+          "path": "docs/ops/backup.md"
+        }
+      ],
+      "type": "enrich_create"
+    },
+    {
+      "action": {
+        "evidence_kind": "shipped_handoff",
+        "evidence_ref": "commit abc123",
+        "set_status": "archived",
+        "to": "_archive/old-plan.md"
+      },
+      "approved": false,
+      "id": "p_7ef72effb0d1",
+      "provenance": {
+        "drafted_at": "2026-07-08",
+        "drafted_by": "librarian-dream",
+        "source": "worklist:open_conflicts"
+      },
+      "rationale": "plan shipped in HEAD",
+      "risk": {
+        "generative": false,
+        "reversible": true,
+        "writes_to": "branch"
+      },
+      "schema_version": "1",
+      "targets": [
+        {
+          "base_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "path": "docs/old-plan.md"
+        }
+      ],
+      "type": "archive"
+    },
+    {
+      "action": {
+        "check": {
+          "cmd": "echo 3",
+          "doc": "docs/ops/backup.md",
+          "extract": "scalar",
+          "id": "backup_coverage",
+          "kind": "track",
+          "source": "warehouse"
+        },
+        "check_id": "backup_coverage",
+        "source": "warehouse"
+      },
+      "approved": false,
+      "id": "p_d95ee1645efc",
+      "provenance": {
+        "command": "psql -c 'select 1'",
+        "drafted_at": "2026-07-08",
+        "drafted_by": "librarian-enrich",
+        "evidence": "3 tables",
+        "source": "catalog-gap"
+      },
+      "rationale": "keep the enriched fact honest",
+      "risk": {
+        "generative": false,
+        "reversible": true,
+        "writes_to": "branch"
+      },
+      "schema_version": "1",
+      "targets": [
+        {
+          "base_sha256": "",
+          "path": "docs/ops/backup.md"
+        }
+      ],
+      "type": "add_check"
+    },
+    {
+      "action": {
+        "canonical": "docs/a.md",
+        "carry_over": [
+          "Section X \u2014 unique"
+        ],
+        "redundant": "docs/b.md",
+        "then_archive": true
+      },
+      "approved": false,
+      "id": "p_dbd527e9dff6",
+      "provenance": {
+        "drafted_at": "2026-07-08",
+        "drafted_by": "librarian-dream",
+        "source": "worklist:open_conflicts"
+      },
+      "rationale": "near-duplicate docs",
+      "risk": {
+        "generative": false,
+        "reversible": false,
+        "writes_to": "branch"
+      },
+      "schema_version": "1",
+      "targets": [
+        {
+          "base_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "path": "docs/a.md"
+        },
+        {
+          "base_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+          "path": "docs/b.md"
+        }
+      ],
+      "type": "merge"
+    }
+  ],
+  "schema_version": "1"
+}
