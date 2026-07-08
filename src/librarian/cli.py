@@ -15,7 +15,6 @@ from pathlib import Path
 
 from . import (
     __version__,
-    apply as apply_engine,
     backfill,
     catalog,
     config,
@@ -29,9 +28,12 @@ from . import (
     suggest,
     verify,
 )
+from . import (
+    apply as apply_engine,
+)
 from .config import Config, ConfigError
-from .proposals import ProposalError
 from .output import Reporter, tag
+from .proposals import ProposalError
 
 STALE_VERIFY_DAYS = 7
 

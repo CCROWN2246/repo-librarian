@@ -39,8 +39,7 @@ class ProvenanceTests(RepoCase):
 
     def test_filtered_run_merges_not_clobbers(self):
         cfg = self.cfg(
-            check_toml("a", "assert", "echo 1", expect="1")
-            + check_toml("b", "assert", "echo 2", expect="2")
+            check_toml("a", "assert", "echo 1", expect="1") + check_toml("b", "assert", "echo 2", expect="2")
         )
         verify.update_provenance(cfg, verify.run(cfg), config.today())
         # a filtered re-run must keep b's record

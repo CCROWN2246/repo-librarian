@@ -24,8 +24,9 @@ class ApplyCase(RepoCase):
 class FixTests(ApplyCase):
     def test_fix_applies(self):
         self.write("d.md", "the count is 20 stations today\n")
-        p = proposals.make("fix", [self.target("d.md", 1)],
-                            {"replace": {"old": "20 stations", "new": "17 stations"}})
+        p = proposals.make(
+            "fix", [self.target("d.md", 1)], {"replace": {"old": "20 stations", "new": "17 stations"}}
+        )
         oc = self.apply(p)
         self.assertEqual(oc.result, ap.APPLIED)
         self.assertIn("17 stations", self.read("d.md"))
@@ -33,21 +34,18 @@ class FixTests(ApplyCase):
 
     def test_fix_idempotent_zero_diff(self):
         self.write("d.md", "value is 20 here\n")
-        p = proposals.make("fix", [self.target("d.md", 1)],
-                            {"replace": {"old": "20", "new": "17"}})
+        p = proposals.make("fix", [self.target("d.md", 1)], {"replace": {"old": "20", "new": "17"}})
         self.assertEqual(self.apply(p).result, ap.APPLIED)
         after_first = self.read("d.md")
         # A re-drafted proposal points at the now-changed file; rebuild its guard.
-        p2 = proposals.make("fix", [self.target("d.md", 1)],
-                            {"replace": {"old": "20", "new": "17"}})
+        p2 = proposals.make("fix", [self.target("d.md", 1)], {"replace": {"old": "20", "new": "17"}})
         oc2 = self.apply(p2)
         self.assertEqual(oc2.result, ap.NOOP)
         self.assertEqual(self.read("d.md"), after_first)  # zero diff
 
     def test_fix_stale_when_file_changed(self):
         self.write("d.md", "value is 20\n")
-        p = proposals.make("fix", [self.target("d.md", 1)],
-                            {"replace": {"old": "20", "new": "17"}})
+        p = proposals.make("fix", [self.target("d.md", 1)], {"replace": {"old": "20", "new": "17"}})
         self.write("d.md", "value is 20 (edited elsewhere)\n")  # someone else touched it
         oc = self.apply(p)
         self.assertEqual(oc.result, ap.STALE)
@@ -56,8 +54,7 @@ class FixTests(ApplyCase):
     def test_fix_truth_table_both_absent(self):
         self.write("d.md", "totally unrelated content\n")
         # forge a proposal whose guard matches the file but whose old/new are absent
-        p = proposals.make("fix", [self.target("d.md", 1)],
-                            {"replace": {"old": "AAA", "new": "BBB"}})
+        p = proposals.make("fix", [self.target("d.md", 1)], {"replace": {"old": "AAA", "new": "BBB"}})
         oc = self.apply(p)
         self.assertEqual(oc.result, ap.STALE)
 
@@ -70,7 +67,8 @@ class FixTests(ApplyCase):
         )
         self.write("d.md", body)
         p = proposals.make(
-            "fix", [self.target("d.md", 12)],
+            "fix",
+            [self.target("d.md", 12)],
             {"replace": {"old": "is 20.", "new": "is 15."}, "drop_marker": True},
         )
         oc = self.apply(p)
@@ -107,22 +105,26 @@ class MarkerTests(ApplyCase):
 class SetReadWhenTests(ApplyCase):
     def test_sets_and_idempotent(self):
         self.write("d.md", make_doc(read_when=""))
-        p = proposals.make("set_read_when", [self.target("d.md")],
-                           {"read_when": ["when onboarding", "before ETL work"]})
+        p = proposals.make(
+            "set_read_when", [self.target("d.md")], {"read_when": ["when onboarding", "before ETL work"]}
+        )
         self.assertEqual(self.apply(p).result, ap.APPLIED)
         from librarian import frontmatter
+
         meta = frontmatter.parse(self.read("d.md")).meta
         self.assertEqual(meta["read_when"], ["when onboarding", "before ETL work"])
-        p2 = proposals.make("set_read_when", [self.target("d.md")],
-                            {"read_when": ["when onboarding", "before ETL work"]})
+        p2 = proposals.make(
+            "set_read_when", [self.target("d.md")], {"read_when": ["when onboarding", "before ETL work"]}
+        )
         self.assertEqual(self.apply(p2).result, ap.NOOP)
 
 
 class ArchiveTests(ApplyCase):
     def test_archive_moves_and_flips_status(self):
         self.write("docs/old.md", make_doc(status="draft"))
-        p = proposals.make("archive", [self.target("docs/old.md")],
-                           {"to": "_archive/old.md", "set_status": "archived"})
+        p = proposals.make(
+            "archive", [self.target("docs/old.md")], {"to": "_archive/old.md", "set_status": "archived"}
+        )
         self.assertEqual(self.apply(p).result, ap.APPLIED)
         self.assertFalse((self.root / "docs/old.md").exists())
         self.assertTrue((self.root / "_archive/old.md").exists())
@@ -130,12 +132,14 @@ class ArchiveTests(ApplyCase):
 
     def test_archive_idempotent_noop(self):
         self.write("docs/old.md", make_doc(status="draft"))
-        p = proposals.make("archive", [self.target("docs/old.md")],
-                           {"to": "_archive/old.md", "set_status": "archived"})
+        p = proposals.make(
+            "archive", [self.target("docs/old.md")], {"to": "_archive/old.md", "set_status": "archived"}
+        )
         self.apply(p)
         # re-drafted proposal: source now gone, guard '' matches the missing file
-        p2 = proposals.make("archive", [self.target("docs/old.md")],
-                            {"to": "_archive/old.md", "set_status": "archived"})
+        p2 = proposals.make(
+            "archive", [self.target("docs/old.md")], {"to": "_archive/old.md", "set_status": "archived"}
+        )
         self.assertEqual(self.apply(p2).result, ap.NOOP)
 
 
@@ -144,9 +148,14 @@ class MergeTests(ApplyCase):
         self.write("docs/a.md", make_doc(id="a", title="A"))
         self.write("docs/b.md", make_doc(id="b", title="B"))
         return proposals.make(
-            "merge", [self.target("docs/a.md"), self.target("docs/b.md")],
-            {"canonical": "docs/a.md", "redundant": "docs/b.md",
-             "carry_over": ["Section X"], "then_archive": True},
+            "merge",
+            [self.target("docs/a.md"), self.target("docs/b.md")],
+            {
+                "canonical": "docs/a.md",
+                "redundant": "docs/b.md",
+                "carry_over": ["Section X"],
+                "then_archive": True,
+            },
         )
 
     def test_merge_archives_redundant(self):
@@ -170,17 +179,26 @@ class MergeTests(ApplyCase):
 class AddCheckTests(ApplyCase):
     def test_registers_and_config_sees_it(self):
         self.write("docs/x.md", make_doc())
-        check = {"id": "cov", "source": "local", "kind": "track", "cmd": "echo 3",
-                 "extract": "scalar", "doc": "docs/x.md"}
-        p = proposals.make("add_check", [self.target("docs/x.md")],
-                           {"check_id": "cov", "source": "local", "check": check})
+        check = {
+            "id": "cov",
+            "source": "local",
+            "kind": "track",
+            "cmd": "echo 3",
+            "extract": "scalar",
+            "doc": "docs/x.md",
+        }
+        p = proposals.make(
+            "add_check", [self.target("docs/x.md")], {"check_id": "cov", "source": "local", "check": check}
+        )
         self.assertEqual(self.apply(p).result, ap.APPLIED)
         from librarian import config
+
         merged = config.load(self.root)
         self.assertIn("cov", {c.id for c in merged.checks})
         # idempotent
-        p2 = proposals.make("add_check", [self.target("docs/x.md")],
-                            {"check_id": "cov", "source": "local", "check": check})
+        p2 = proposals.make(
+            "add_check", [self.target("docs/x.md")], {"check_id": "cov", "source": "local", "check": check}
+        )
         self.assertEqual(self.apply(p2).result, ap.NOOP)
 
 
@@ -189,11 +207,19 @@ class EnrichCreateTests(ApplyCase):
         # target is the not-yet-existing new file: its guard is '' (missing)
         t = proposals.Target(path="docs/ops/backup.md", base_sha256="")
         return proposals.make(
-            "enrich_create", [t],
-            {"new_path": "docs/ops/backup.md", "status": "provisional",
-             "frontmatter": {"id": "ops-backup", "title": "Backup", "domain": "ops",
-                             "status": "provisional"},
-             "body": "# Backup\n\nprovisional\n"},
+            "enrich_create",
+            [t],
+            {
+                "new_path": "docs/ops/backup.md",
+                "status": "provisional",
+                "frontmatter": {
+                    "id": "ops-backup",
+                    "title": "Backup",
+                    "domain": "ops",
+                    "status": "provisional",
+                },
+                "body": "# Backup\n\nprovisional\n",
+            },
         )
 
     def test_creates_provisional_doc(self):
@@ -214,8 +240,11 @@ class ResolveAbsenceTests(ApplyCase):
     def test_informational_no_file_change(self):
         self.write("d.md", make_doc())
         before = self.read("d.md")
-        p = proposals.make("resolve_absence", [self.target("d.md", 1)],
-                           {"verdict": "stale_claim", "filled_by": "docs/answer.md"})
+        p = proposals.make(
+            "resolve_absence",
+            [self.target("d.md", 1)],
+            {"verdict": "stale_claim", "filled_by": "docs/answer.md"},
+        )
         self.assertEqual(self.apply(p).result, ap.APPLIED)
         self.assertEqual(self.read("d.md"), before)
 
@@ -223,8 +252,7 @@ class ResolveAbsenceTests(ApplyCase):
 class LogTests(ApplyCase):
     def test_apply_log_written(self):
         self.write("d.md", "value 20\n")
-        p = proposals.make("fix", [self.target("d.md", 1)],
-                           {"replace": {"old": "20", "new": "17"}})
+        p = proposals.make("fix", [self.target("d.md", 1)], {"replace": {"old": "20", "new": "17"}})
         cfg = self.cfg()
         oc = ap.apply_one(cfg, p)
         ap.log_outcomes(cfg, [oc], now=1000)

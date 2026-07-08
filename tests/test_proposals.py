@@ -35,49 +35,101 @@ open('tests/golden/proposals.json','w').write(proposals.dump(sample_proposals())
         source="worklist:open_conflicts", drafted_at="2026-07-08", drafted_by="librarian-dream"
     )
     enrich = P.Provenance(
-        source="catalog-gap", command="psql -c 'select 1'", evidence="3 tables",
-        drafted_at="2026-07-08", drafted_by="librarian-enrich",
+        source="catalog-gap",
+        command="psql -c 'select 1'",
+        evidence="3 tables",
+        drafted_at="2026-07-08",
+        drafted_by="librarian-enrich",
     )
     return [
         P.make(
-            "fix", [T("docs/schema.md", "a" * 64, 12)],
+            "fix",
+            [T("docs/schema.md", "a" * 64, 12)],
             {"replace": {"old": "20 stations", "new": "17 stations"}, "drop_marker": True},
-            provenance=dream, rationale="min dock count is 15, not 20",
-        ),
-        P.make("ack", [T("docs/interview.md", "b" * 64, 8)], {"mark": "KB-ACK"},
-               provenance=dream, rationale="transcript — keep verbatim"),
-        P.make(
-            "archive", [T("docs/old-plan.md", "c" * 64)],
-            {"to": "_archive/old-plan.md", "set_status": "archived",
-             "evidence_kind": "shipped_handoff", "evidence_ref": "commit abc123"},
-            provenance=dream, rationale="plan shipped in HEAD",
+            provenance=dream,
+            rationale="min dock count is 15, not 20",
         ),
         P.make(
-            "merge", [T("docs/a.md", "d" * 64), T("docs/b.md", "e" * 64)],
-            {"canonical": "docs/a.md", "redundant": "docs/b.md",
-             "carry_over": ["Section X — unique"], "then_archive": True},
-            provenance=dream, rationale="near-duplicate docs",
-        ),
-        P.make("set_read_when", [T("docs/routing.md", "f" * 64)],
-               {"read_when": ["when onboarding", "before touching ETL"]},
-               provenance=dream, rationale="empty routing phrase"),
-        P.make("resolve_absence", [T("docs/gaps.md", "1" * 64, 4)],
-               {"verdict": "stale_claim", "filled_by": "docs/answer.md"},
-               provenance=dream, rationale="the KB actually answers this"),
-        P.make(
-            "enrich_create", [T("docs/ops/backup.md", "")],
-            {"new_path": "docs/ops/backup.md", "domain": "ops", "status": "provisional",
-             "frontmatter": {"id": "ops-backup", "title": "Backup coverage", "domain": "ops",
-                             "status": "provisional"},
-             "body": "# Backup coverage\n\nprovisional draft\n", "spawns_check": "backup_coverage"},
-            provenance=enrich, rationale="gap: no backup-coverage doc",
+            "ack",
+            [T("docs/interview.md", "b" * 64, 8)],
+            {"mark": "KB-ACK"},
+            provenance=dream,
+            rationale="transcript — keep verbatim",
         ),
         P.make(
-            "add_check", [T("docs/ops/backup.md", "")],
-            {"check_id": "backup_coverage", "source": "warehouse",
-             "check": {"id": "backup_coverage", "source": "warehouse", "kind": "track",
-                       "cmd": "echo 3", "extract": "scalar", "doc": "docs/ops/backup.md"}},
-            provenance=enrich, rationale="keep the enriched fact honest",
+            "archive",
+            [T("docs/old-plan.md", "c" * 64)],
+            {
+                "to": "_archive/old-plan.md",
+                "set_status": "archived",
+                "evidence_kind": "shipped_handoff",
+                "evidence_ref": "commit abc123",
+            },
+            provenance=dream,
+            rationale="plan shipped in HEAD",
+        ),
+        P.make(
+            "merge",
+            [T("docs/a.md", "d" * 64), T("docs/b.md", "e" * 64)],
+            {
+                "canonical": "docs/a.md",
+                "redundant": "docs/b.md",
+                "carry_over": ["Section X — unique"],
+                "then_archive": True,
+            },
+            provenance=dream,
+            rationale="near-duplicate docs",
+        ),
+        P.make(
+            "set_read_when",
+            [T("docs/routing.md", "f" * 64)],
+            {"read_when": ["when onboarding", "before touching ETL"]},
+            provenance=dream,
+            rationale="empty routing phrase",
+        ),
+        P.make(
+            "resolve_absence",
+            [T("docs/gaps.md", "1" * 64, 4)],
+            {"verdict": "stale_claim", "filled_by": "docs/answer.md"},
+            provenance=dream,
+            rationale="the KB actually answers this",
+        ),
+        P.make(
+            "enrich_create",
+            [T("docs/ops/backup.md", "")],
+            {
+                "new_path": "docs/ops/backup.md",
+                "domain": "ops",
+                "status": "provisional",
+                "frontmatter": {
+                    "id": "ops-backup",
+                    "title": "Backup coverage",
+                    "domain": "ops",
+                    "status": "provisional",
+                },
+                "body": "# Backup coverage\n\nprovisional draft\n",
+                "spawns_check": "backup_coverage",
+            },
+            provenance=enrich,
+            rationale="gap: no backup-coverage doc",
+        ),
+        P.make(
+            "add_check",
+            [T("docs/ops/backup.md", "")],
+            {
+                "check_id": "backup_coverage",
+                "source": "warehouse",
+                "check": {
+                    "id": "backup_coverage",
+                    "source": "warehouse",
+                    "kind": "track",
+                    "cmd": "echo 3",
+                    "extract": "scalar",
+                    "doc": "docs/ops/backup.md",
+                },
+            },
+            provenance=enrich,
+            rationale="keep the enriched fact honest",
         ),
     ]
 
@@ -208,7 +260,8 @@ class GoldenTests(unittest.TestCase):
         got = proposals.dump(sample_proposals())
         expected = GOLDEN.read_text(encoding="utf-8")
         self.assertEqual(
-            got, expected,
+            got,
+            expected,
             "proposals.json golden drifted — if deliberate, regenerate it "
             "(recipe in sample_proposals' docstring)",
         )
@@ -222,8 +275,10 @@ class GoldenTests(unittest.TestCase):
 class SidecarAndConfigTests(RepoCase):
     def test_generated_checks_round_trip(self):
         cfg = self.cfg()
-        checks = [{"id": "c2", "kind": "track", "cmd": "echo 2", "doc": "d.md"},
-                  {"id": "c1", "kind": "track", "cmd": "echo 1", "doc": "d.md"}]
+        checks = [
+            {"id": "c2", "kind": "track", "cmd": "echo 2", "doc": "d.md"},
+            {"id": "c1", "kind": "track", "cmd": "echo 1", "doc": "d.md"},
+        ]
         proposals.save_generated_checks(cfg, checks)
         back = proposals.load_generated_checks(cfg)
         self.assertEqual([c["id"] for c in back], ["c1", "c2"])  # sorted, deduped
@@ -255,8 +310,10 @@ class SidecarAndConfigTests(RepoCase):
         cfg = self.cfg()
         proposals.save_generated_checks(
             cfg,
-            [{"id": "ok", "kind": "track", "cmd": "echo 1", "doc": "d.md"},
-             {"id": "bad", "kind": "nonsense"}],
+            [
+                {"id": "ok", "kind": "track", "cmd": "echo 1", "doc": "d.md"},
+                {"id": "bad", "kind": "nonsense"},
+            ],
         )
         merged = config.load(self.root)
         ids = {c.id for c in merged.checks}

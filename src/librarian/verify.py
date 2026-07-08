@@ -219,9 +219,7 @@ def save_provenance(cfg: Config, records: dict) -> None:
         "records": [records[k] for k in sorted(records)],
     }
     # sort_keys like baselines.json -> stable, minimal-diff serialization (committed file).
-    (out / PROVENANCE_FILE).write_text(
-        json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-    )
+    (out / PROVENANCE_FILE).write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
 def update_provenance(cfg: Config, run_result: RunResult, today: date) -> None:

@@ -22,10 +22,16 @@ class CliCase(RepoCase):
 
 class QueryTests(CliCase):
     def seed(self):
-        self.write("docs/etl.md", make_doc(id="etl", title="ETL", domain="data",
-                                            status="provisional", read_when="run the etl"))
-        self.write("docs/ops.md", make_doc(id="ops", title="Ops runbook", domain="ops",
-                                           status="authoritative", read_when="on call"))
+        self.write(
+            "docs/etl.md",
+            make_doc(id="etl", title="ETL", domain="data", status="provisional", read_when="run the etl"),
+        )
+        self.write(
+            "docs/ops.md",
+            make_doc(
+                id="ops", title="Ops runbook", domain="ops", status="authoritative", read_when="on call"
+            ),
+        )
         self.run_sub("index")
 
     def test_filter_by_domain_json(self):
@@ -80,9 +86,12 @@ class ApplyCliTests(CliCase):
         cfg = self.cfg()
         sha = proposals.file_sha256(self.root / "docs/schema.md")
         t = proposals.Target(path="docs/schema.md", base_sha256=sha, line=11)
-        p = proposals.make("fix", [t],
-                           {"replace": {"old": "is 20.", "new": "is 15."}, "drop_marker": True},
-                           approved=approved)
+        p = proposals.make(
+            "fix",
+            [t],
+            {"replace": {"old": "is 20.", "new": "is 15."}, "drop_marker": True},
+            approved=approved,
+        )
         proposals.save(cfg, [p])
         return p
 
