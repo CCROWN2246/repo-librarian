@@ -621,7 +621,8 @@ def cmd_dream(args, rep: Reporter) -> int:
     c = wl.counts()
     rep.say(
         f"dream worklist: {c['open_conflicts']} conflict(s) · {c['merge_candidates']} merge "
-        f"candidate(s) · {c['read_when_todos']} routing TODO(s) · {c['absence_claims']} absence-claim(s)"
+        f"candidate(s) · {c['read_when_todos']} routing TODO(s) · {c['absence_claims']} absence-claim(s) "
+        f"· {c['retirement_candidates']} retirement candidate(s)"
     )
     rep.say(f"  {'DUE' if due else 'not due'}: {reason}")
     if wl.open_conflicts:
@@ -640,6 +641,10 @@ def cmd_dream(args, rep: Reporter) -> int:
         rep.say("  absence-claims to audit:")
         for x in wl.absence_claims:
             rep.say(f"    {x['path']}:{x['line']}")
+    if wl.retirement_candidates:
+        rep.say("  retirement candidates (terminal status, still in the docs tree):")
+        for x in wl.retirement_candidates:
+            rep.say(f"    {x['path']}  ({x['evidence']})")
     if due:
         rep.say(
             "\nRun /librarian-dream to draft proposals on a branch, "

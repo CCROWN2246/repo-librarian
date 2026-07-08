@@ -9,6 +9,8 @@ branch. Three job types survive scope triage:
                    overlap enough to smell like duplicates
   read_when_todos  entries with empty or TODO routing phrases
   absence_claims   confident "we don't have X" lines to audit against the catalog
+  retirement       docs marked with a terminal status (retired/superseded/…) that
+                   still live in the docs tree — positive-evidence archive candidates
 
 The delta gate: a content hash of the worklist is stamped on `--mark-done`
 (_index/.last_dream). A dream is DUE only when the worklist is non-empty AND
@@ -33,6 +35,11 @@ from .config import Config
 STATE_FILE = ".last_dream"
 DEFAULT_MERGE_SIMILARITY = 0.6
 MAX_MERGE_CANDIDATES = 10
+# Terminal statuses that mean "the author already retired this" — positive evidence
+# for a propose-only archive. A doc carrying one but still living in the docs tree
+# (not yet moved to the archive dir) is a retirement candidate. Conservative by design
+# (R3): status is an explicit author signal, never an inference.
+RETIRED_STATUSES = {"retired", "superseded", "archived", "obsolete", "deprecated", "shipped", "done"}
 _WORD = re.compile(r"[a-z0-9]+")
 # generic words that shouldn't drive doc-similarity
 _STOP = {
@@ -63,11 +70,16 @@ class Worklist:
     merge_candidates: list[dict] = field(default_factory=list)
     read_when_todos: list[dict] = field(default_factory=list)
     absence_claims: list[dict] = field(default_factory=list)
+    retirement_candidates: list[dict] = field(default_factory=list)
 
     @property
     def empty(self) -> bool:
         return not (
-            self.open_conflicts or self.merge_candidates or self.read_when_todos or self.absence_claims
+            self.open_conflicts
+            or self.merge_candidates
+            or self.read_when_todos
+            or self.absence_claims
+            or self.retirement_candidates
         )
 
     @property
@@ -77,6 +89,7 @@ class Worklist:
             + len(self.merge_candidates)
             + len(self.read_when_todos)
             + len(self.absence_claims)
+            + len(self.retirement_candidates)
         )
 
     def counts(self) -> dict[str, int]:
@@ -85,6 +98,7 @@ class Worklist:
             "merge_candidates": len(self.merge_candidates),
             "read_when_todos": len(self.read_when_todos),
             "absence_claims": len(self.absence_claims),
+            "retirement_candidates": len(self.retirement_candidates),
         }
 
     def to_dict(self) -> dict:
@@ -93,6 +107,7 @@ class Worklist:
             "merge_candidates": self.merge_candidates,
             "read_when_todos": self.read_when_todos,
             "absence_claims": self.absence_claims,
+            "retirement_candidates": self.retirement_candidates,
             "counts": self.counts(),
         }
 
@@ -168,6 +183,28 @@ def _read_when_todos(entries: list[dict]) -> list[dict]:
     return out
 
 
+def retirement_candidates(entries: list[dict]) -> list[dict]:
+    """Docs the author already marked terminal (RETIRED_STATUSES) but that still live
+    in the docs tree. Deterministic positive evidence; the agent confirms and the
+    proposal is a reversible archive (never an auto-delete)."""
+    out = []
+    for d in sorted(entries, key=_entry_path):
+        if d.get("kind") != "doc":
+            continue
+        status = str(d.get("status", "")).lower()
+        if status in RETIRED_STATUSES:
+            out.append(
+                {
+                    "path": _entry_path(d),
+                    "id": str(d.get("id", "?")),
+                    "title": str(d.get("title", "")),
+                    "status": status,
+                    "evidence": f"status={status}",
+                }
+            )
+    return out
+
+
 def _build(
     entries: list[dict], conflicts: list[dict], absence: list[dict], merge_threshold: float
 ) -> Worklist:
@@ -176,6 +213,7 @@ def _build(
         absence_claims=sorted(absence, key=lambda c: (c["path"], c["line"])),
         merge_candidates=merge_candidates(entries, merge_threshold),
         read_when_todos=_read_when_todos(entries),
+        retirement_candidates=retirement_candidates(entries),
     )
 
 

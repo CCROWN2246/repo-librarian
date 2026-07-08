@@ -52,6 +52,13 @@ pre-filter — expect real false positives.
     catalog + grep for X. If the KB actually fills the gap elsewhere, flag the claim as stale and
     name the doc that answers it. If the gap is real, say "confirmed gap — leave as-is."
 
+**D. Retirement candidates** (`worklist.retirement_candidates`) — docs whose author already set a
+terminal status (retired/superseded/shipped/done/…) but which still live in the docs tree. These are
+*positive evidence*, not a guess. For each: open the doc, confirm the status is genuine (not a
+mislabel) and that nothing still points to it as authoritative. If it's truly done, recommend
+`librarian archive <path>` (reversible: status flip + git mv, never a delete). If a live doc still
+depends on it, say so and leave it. **Propose only — never archive during the dream.**
+
 Keep it bounded: if a bucket is very large, do the first ~10 and note how many remain.
 
 ## Step 3 — write the morning report

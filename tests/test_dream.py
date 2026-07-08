@@ -117,6 +117,22 @@ class WorklistTests(RepoCase):
         self.assertIn("docs/todo.md", paths)
         self.assertNotIn("docs/good.md", paths)
 
+    def test_retirement_candidates_surface_terminal_status(self):
+        self.write("docs/live.md", make_doc(id="live", status="authoritative", read_when="a task"))
+        self.write("docs/retired.md", make_doc(id="retired", status="retired", read_when="a task"))
+        self.write("docs/done.md", make_doc(id="done", status="shipped", read_when="a task"))
+        _, wl = _wl(self.cfg("\n[taxonomy]\nstatuses = ['authoritative', 'retired', 'shipped']\n"))
+        paths = {r["path"] for r in wl.retirement_candidates}
+        self.assertEqual(paths, {"docs/retired.md", "docs/done.md"})
+        self.assertNotIn("docs/live.md", paths)
+        ev = {r["path"]: r["evidence"] for r in wl.retirement_candidates}
+        self.assertEqual(ev["docs/retired.md"], "status=retired")
+
+    def test_retirement_empty_when_all_live(self):
+        self.write("docs/a.md", make_doc(id="a", status="authoritative", read_when="a task"))
+        _, wl = _wl(self.cfg())
+        self.assertEqual(wl.retirement_candidates, [])
+
     def test_conflicts_and_absence_surface(self):
         body = make_doc(id="c", read_when="x") + (
             "\nclaim <!-- KB-CONTRADICTED: conflicts with [verified: y] -->\n"

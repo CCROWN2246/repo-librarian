@@ -48,7 +48,8 @@ run /librarian-dream" — computed cheaply from `catalog.json`, no extra filesys
 1. Runs `librarian dream --json`. **If not due, it stops** — no branch, no tokens.
 2. Creates `librarian/dream-<date>` and does the judgment work for each non-empty bucket:
    conflict resolutions (with exact replacement text), merge plans (canonical + what to preserve),
-   `read_when` proposals, absence-claim audits.
+   `read_when` proposals, absence-claim audits, and retirement candidates (docs marked with a
+   terminal status but still in the tree — propose-only archive).
 3. Writes everything to `MORNING-REPORT.md` and commits **only that** to the branch. Main is never
    touched; nothing is auto-applied; nothing is deleted.
 4. Runs `librarian dream --mark-done` and tells you where the report is and what to look at first.
