@@ -5,6 +5,17 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
+### Added — Phase 2 (producer wiring)
+- **`librarian propose`** — the dream producer. Reads a partial proposal (type / target paths + optional
+  line / action / rationale) as JSON on stdin or a file; the CLI fills each target's `base_sha256` (hashing
+  the file as it is now), computes the id, applies the risk defaults, validates, and upserts into
+  `_index/proposals.json` (dedup by id, so a re-draft replaces cleanly). The agent supplies judgment; the
+  CLI supplies determinism — no hand-computed hashes or ids.
+- **`/librarian-dream` now emits proposal objects**, not MORNING-REPORT prose: each judgment becomes a
+  `librarian propose` call, `proposals.json` is the machine-applyable artifact the human approves and
+  `librarian apply` consumes, and the report is its human-readable companion. This turns the whole
+  Phase-0/1 spine live end-to-end (dream → propose → approve → apply → reindex → mark-done).
+
 ### Added — Phase 1 (packaged commands) + provenance query
 - **B1 work-resumption nudge** — a throttled `UserPromptSubmit` hook (`.claude/hooks/librarian-prompt.sh`)
   that nudges when you resume work, not just at cold session start. `librarian status --hook --throttle`

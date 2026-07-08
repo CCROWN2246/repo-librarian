@@ -263,6 +263,74 @@ def make(
     return p
 
 
+def build_from_partial(cfg, partial: dict, *, approved: bool = False) -> Proposal:
+    """Turn a producer's partial proposal into a validated one. The agent supplies the
+    JUDGMENT (type, target paths + optional line, action, rationale, provenance); the CLI
+    supplies DETERMINISM: hash each target file for its base_sha256, compute the id, fill
+    the risk profile. This is what `librarian propose` calls so the dream agent never
+    hand-computes a hash. Missing base_sha256 is filled from the current file on disk.
+    """
+    _require(isinstance(partial, dict), "proposal: expected an object")
+    ptype = partial.get("type")
+    _require(ptype in TYPES, f"proposal: type must be one of {', '.join(TYPES)}, got {ptype!r}")
+
+    raw_targets = partial.get("targets")
+    _require(isinstance(raw_targets, list) and raw_targets, "proposal: targets must be a non-empty array")
+    targets = []
+    for i, t in enumerate(raw_targets):
+        _require(isinstance(t, dict), f"proposal.targets[{i}]: expected an object")
+        path = t.get("path")
+        _require(isinstance(path, str) and path, f"proposal.targets[{i}]: path is required")
+        unknown = set(t) - {"path", "base_sha256", "line"}
+        _require(not unknown, f"proposal.targets[{i}]: unknown key(s): {', '.join(sorted(unknown))}")
+        base = t.get("base_sha256")
+        if base is None:
+            base = file_sha256(cfg.path(path))  # hash the file as it is right now
+        line = t.get("line")
+        _require(line is None or isinstance(line, int), f"proposal.targets[{i}]: line must be an int")
+        targets.append(Target(path=path, base_sha256=base, line=line))
+
+    action = partial.get("action")
+    _require(isinstance(action, dict), "proposal: action must be an object")
+
+    prov_raw = partial.get("provenance") or {}
+    _require(isinstance(prov_raw, dict), "proposal: provenance must be an object")
+    try:
+        provenance = Provenance(**prov_raw)
+    except TypeError as e:
+        raise ProposalError(f"proposal.provenance: {e}") from e
+
+    risk = None
+    if "risk" in partial:
+        risk_raw = partial["risk"]
+        _require(isinstance(risk_raw, dict), "proposal: risk must be an object")
+        try:
+            risk = Risk(**risk_raw)
+        except TypeError as e:
+            raise ProposalError(f"proposal.risk: {e}") from e
+
+    p = make(
+        ptype,
+        targets,
+        action,
+        provenance=provenance,
+        risk=risk,
+        rationale=partial.get("rationale", ""),
+        approved=approved,
+    )
+    # Round-trip through strict validation (writes_to enum, etc.) before it lands.
+    return from_dict(p.to_dict())
+
+
+def upsert(existing: list[Proposal], incoming: list[Proposal]) -> list[Proposal]:
+    """Merge proposals by id — an incoming re-draft replaces the prior one, others are
+    kept. Order-stable by id (matches dump()'s sort), so run-twice = zero diff."""
+    by_id = {p.id: p for p in existing}
+    for p in incoming:
+        by_id[p.id] = p
+    return [by_id[k] for k in sorted(by_id)]
+
+
 def default_risk(ptype: str) -> Risk:
     """The conservative default risk profile per type (the accuracy wall's floor).
 

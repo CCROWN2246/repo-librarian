@@ -181,6 +181,15 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--to", default=None, help="destination path (default: <archive_dir>/<basename>)")
     sp.add_argument("--dry-run", action="store_true", help="report what would happen; write nothing")
 
+    sp = sub.add_parser(
+        "propose", help="append well-formed proposal object(s) to proposals.json (the dream producer)"
+    )
+    _add_common(sp)
+    sp.add_argument(
+        "file", nargs="?", default="-", help="JSON: one partial proposal or a list (default: stdin '-')"
+    )
+    sp.add_argument("--approved", action="store_true", help="mark the proposal(s) approved on creation")
+
     sp = sub.add_parser("apply", help="execute approved proposal objects against the working tree")
     _add_common(sp)
     g = sp.add_mutually_exclusive_group(required=True)
@@ -802,6 +811,40 @@ def cmd_archive(args, rep: Reporter) -> int:
     return 0
 
 
+def cmd_propose(args, rep: Reporter) -> int:
+    cfg = _resolve_config(args)
+    if args.file == "-":
+        raw = sys.stdin.read()
+    else:
+        try:
+            raw = Path(args.file).read_text(encoding="utf-8")
+        except OSError as e:
+            rep.error(f"cannot read {args.file}: {e}")
+            return 2
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError as e:
+        rep.error(f"invalid JSON: {e}")
+        return 2
+    partials = data if isinstance(data, list) else [data]
+    built = [proposals.build_from_partial(cfg, pt, approved=args.approved) for pt in partials]
+    merged = proposals.upsert(proposals.load(cfg), built)
+    proposals.save(cfg, merged)
+    if args.json:
+        rep.emit_json(
+            {
+                "added": [p.id for p in built],
+                "total": len(merged),
+                "proposals": [p.to_dict() for p in built],
+            }
+        )
+    else:
+        for p in built:
+            rep.say(f"  proposed {p.type} {p.id}{' (approved)' if p.approved else ''} — {p.rationale}")
+        rep.say(f"  {len(merged)} proposal(s) now in {cfg.index_dir}/{proposals.PROPOSALS_FILE}")
+    return 0
+
+
 def _commit_applied(cfg: Config, props, rep: Reporter) -> bool:
     """tier=commit: stage + commit the applied changes on the CURRENT branch (never
     main implicitly — the caller's branch is wherever they are). Best-effort."""
@@ -895,6 +938,7 @@ COMMANDS = {
     "query": cmd_query,
     "why": cmd_why,
     "archive": cmd_archive,
+    "propose": cmd_propose,
     "apply": cmd_apply,
     "doctor": cmd_doctor,
 }
