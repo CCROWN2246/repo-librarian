@@ -29,4 +29,4 @@ _These docs assert a number/count/ID but have no `[[verify.checks]]` entry guard
 
 | id | doc | claim |
 |----|-----|-------|
-| demo-readme | `README.md` | 20 docks |
+| demo-readme | `README.md` | has 20 |

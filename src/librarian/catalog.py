@@ -41,10 +41,12 @@ ABSENCE_SKIP_LINE = (
 # "count is 20", "95%") that could silently drift from its source. Advisory (like the
 # absence guard) — the point is to surface a doc asserting such a fact with NO verify
 # check guarding it, so the missing check becomes visible. The agent judges which matter.
+# Precision-first (advisory should not cry wolf): match an ASSERTED quantity —
+# "has 9 columns", "count is 20", "= 17", "95%" — not incidental numbers like a version
+# (Node 20), an RFC id (RFC-7807), or a definition ("trailing 90 days").
 CHECKABLE_RE = re.compile(
-    r"\b\d[\d,]*(?:\.\d+)?\s*%"  # 95%
-    r"|\b\d[\d,]*\s+[A-Za-z]{3,}"  # 17 stations / 9 columns
-    r"|\b(?:is|are|=|:)\s+\d[\d,]*\b",  # count is 20 / = 17
+    r"(?<![\w.-])\d[\d,]*(?:\.\d+)?\s*%"  # 95%
+    r"|\b(?:is|are|was|were|has|have|of|=|:)\s+\d[\d,]*\b",  # has 9 / count is 20 / = 17
     re.I,
 )
 
