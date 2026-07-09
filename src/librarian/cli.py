@@ -693,7 +693,7 @@ def cmd_dream(args, rep: Reporter) -> int:
     rep.say(
         f"dream worklist: {c['open_conflicts']} conflict(s) · {c['merge_candidates']} merge "
         f"candidate(s) · {c['read_when_todos']} routing TODO(s) · {c['absence_claims']} absence-claim(s) "
-        f"· {c['retirement_candidates']} retirement candidate(s)"
+        f"· {c['retirement_candidates']} retirement candidate(s) · {c['coverage_gaps']} coverage gap(s)"
     )
     rep.say(f"  {'DUE' if due else 'not due'}: {reason}")
     if wl.open_conflicts:
@@ -716,6 +716,10 @@ def cmd_dream(args, rep: Reporter) -> int:
         rep.say("  retirement candidates (terminal status, still in the docs tree):")
         for x in wl.retirement_candidates:
             rep.say(f"    {x['path']}  ({x['evidence']})")
+    if wl.coverage_gaps:
+        rep.say("  coverage gaps (checkable fact, no verify check — advisory, doesn't trigger the nudge):")
+        for x in wl.coverage_gaps:
+            rep.say(f"    {x['path']}  (claim: {x.get('text', '')})")
     if due:
         rep.say(
             "\nRun /librarian-dream to draft proposals on a branch, "

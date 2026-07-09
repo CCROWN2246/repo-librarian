@@ -18,8 +18,8 @@ Read the JSON. **If `due` is `false`, STOP immediately** — report the one-line
 nothing else (no branch, no tokens spent on analysis). Most runs end here; that is success, not
 failure.
 
-If `due` is `true`, the `worklist` has five buckets. Note the counts; you'll work only the
-non-empty ones.
+If `due` is `true`, the `worklist` has five actionable buckets (below) plus an advisory `coverage_gaps`
+list. Note the counts; you'll work only the non-empty ones.
 
 ## Step 1 — stay on the user's branch (no branch needed)
 Dreaming does not change any knowledge doc — it only writes proposal objects to `_index/proposals.json`.
@@ -80,6 +80,22 @@ librarian propose <<'JSON'
 JSON
 ```
 If a live doc still depends on it, say so and emit nothing.
+
+**E. Coverage gaps** (`worklist.coverage_gaps`) — docs asserting a checkable number/count/ID with NO
+verify check guarding it (so it can silently drift from its source). For each that's genuinely worth
+guarding, pick a source from `[verify.sources]` and draft the check with an `add_check` proposal:
+```
+librarian propose <<'JSON'
+{"type":"add_check","targets":[{"path":"docs/data/warehouse-schema.md"}],
+ "action":{"check_id":"customers_column_count","source":"warehouse",
+           "check":{"id":"customers_column_count","source":"warehouse","kind":"assert","doc":"docs/data/warehouse-schema.md",
+                    "cmd":"<query that returns the number>","extract":"scalar","expect":"9"}},
+ "rationale":"guard the '9 columns' claim against the warehouse"}
+JSON
+```
+Skip a gap if the number isn't really a durable fact (a casual figure, an example) or no source fits —
+say so briefly. This bucket is advisory and does NOT drive the nudge; work it opportunistically while
+you're already dreaming.
 
 Keep it bounded: if a bucket is very large, do the first ~10 and note how many remain.
 

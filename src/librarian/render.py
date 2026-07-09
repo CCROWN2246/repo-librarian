@@ -129,6 +129,18 @@ def staleness_md(cfg: Config, res: CatalogResult) -> str:
             "|-----|------|------|",
         ]
         lines += [f"| `{p}` | {i} | {t} |" for (p, i, t) in sorted(res.absence_claims)] + [""]
+    if res.coverage_gaps:
+        lines += [
+            "## Correctness coverage (ADVISORY — checkable facts with no verify check)",
+            "",
+            "_These docs assert a number/count/ID but have no `[[verify.checks]]` entry guarding it, so it "
+            "can silently drift from its source. Not every hit warrants a check — the point is the missing "
+            "check is visible. `/librarian-dream` can draft the check for you._",
+            "",
+            "| id | doc | claim |",
+            "|----|-----|-------|",
+        ]
+        lines += [f"| {i} | `{p}` | {t} |" for (i, p, t) in sorted(res.coverage_gaps)] + [""]
     if not (res.orphans or res.stale or res.conflicts):
         lines.append(
             "Nothing flagged." + (" (See advisory absence-claims above.)" if res.absence_claims else "")
@@ -156,6 +168,7 @@ def catalog_json(res: CatalogResult) -> str:
                 {"path": p, "line": i, "text": t} for p, i, t in sorted(res.conflicts_ack)
             ],
             "absence_claims": [{"path": p, "line": i, "text": t} for p, i, t in sorted(res.absence_claims)],
+            "coverage_gaps": [{"id": i, "path": p, "text": t} for i, p, t in sorted(res.coverage_gaps)],
             "unverified_sources": sorted(d["_path"] for d in res.unverified),
             "uncovered": sorted(res.uncovered),
             "inbox_pending": res.inbox_pending,

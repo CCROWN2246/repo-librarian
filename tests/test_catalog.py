@@ -77,6 +77,40 @@ class CatalogTests(RepoCase):
         _, res = self.build()
         self.assertTrue(any("disputed" in why for _, _, why in res.stale))
 
+    def test_coverage_gap_flagged(self):
+        # an authoritative doc asserts a number with no verify check -> coverage gap
+        self.write(
+            "docs/a.md", make_doc(id="a", last_verified="2026-07-01") + "\nThe orders table has 9 columns.\n"
+        )
+        _, res = self.build()
+        self.assertTrue(any(p == "docs/a.md" for _, p, _ in res.coverage_gaps))
+
+    def test_coverage_gap_cleared_by_a_check(self):
+        self.write(
+            "docs/a.md", make_doc(id="a", last_verified="2026-07-01") + "\nThe orders table has 9 columns.\n"
+        )
+        _, res = self.build(
+            "\n[[verify.checks]]\nid='cols'\nkind='assert'\ndoc='docs/a.md'\ncmd='echo 9'\nexpect='9'\n"
+        )
+        self.assertEqual(res.coverage_gaps, [])
+
+    def test_coverage_skips_non_authoritative(self):
+        body = make_doc(id="a", status="provisional", last_verified="2026-07-01") + "\nHas 9 columns.\n"
+        self.write("docs/a.md", body)
+        _, res = self.build()
+        self.assertEqual(res.coverage_gaps, [])
+
+    def test_coverage_skips_code_fences(self):
+        body = make_doc(id="a", last_verified="2026-07-01") + "\n```\ncount = 9\n```\njust prose here.\n"
+        self.write("docs/a.md", body)
+        _, res = self.build()
+        self.assertEqual(res.coverage_gaps, [])  # the only number is inside a code fence
+
+    def test_coverage_guard_off(self):
+        self.write("docs/a.md", make_doc(id="a", last_verified="2026-07-01") + "\nHas 9 columns.\n")
+        _, res = self.build("\n[index]\ncoverage_guard = false\n")
+        self.assertEqual(res.coverage_gaps, [])
+
     def test_unverified_tier_listed(self):
         doc = make_doc(last_verified="2026-07-01").replace(
             "status: authoritative", "status: reference\nauthority: unverified"

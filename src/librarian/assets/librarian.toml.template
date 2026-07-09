@@ -23,6 +23,8 @@ schema_version = 1
 
 [index]
 # absence_guard = true                     # advisory scan for confident "we don't have X" claims
+# coverage_guard = true                    # advisory scan: authoritative docs asserting a checkable
+#                                          # number/count/ID with no [[verify.checks]] guarding it
 # fail_on = []                             # gate categories for `librarian index --check`:
 #                                          # missing_frontmatter, unregistered, orphans,
 #                                          # open_conflicts, taxonomy, fm_warnings

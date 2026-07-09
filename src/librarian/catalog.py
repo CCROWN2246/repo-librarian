@@ -37,6 +37,17 @@ ABSENCE_SKIP_LINE = (
     "ABSENCE_",
 )
 
+# Correctness-coverage guard: a quantified factual claim ("17 stations", "9 columns",
+# "count is 20", "95%") that could silently drift from its source. Advisory (like the
+# absence guard) — the point is to surface a doc asserting such a fact with NO verify
+# check guarding it, so the missing check becomes visible. The agent judges which matter.
+CHECKABLE_RE = re.compile(
+    r"\b\d[\d,]*(?:\.\d+)?\s*%"  # 95%
+    r"|\b\d[\d,]*\s+[A-Za-z]{3,}"  # 17 stations / 9 columns
+    r"|\b(?:is|are|=|:)\s+\d[\d,]*\b",  # count is 20 / = 17
+    re.I,
+)
+
 
 @dataclass
 class CatalogResult:
@@ -48,6 +59,7 @@ class CatalogResult:
     conflicts: list[tuple[str, int, str]] = field(default_factory=list)
     conflicts_ack: list[tuple[str, int, str]] = field(default_factory=list)
     absence_claims: list[tuple[str, int, str]] = field(default_factory=list)
+    coverage_gaps: list[tuple[str, str, str]] = field(default_factory=list)  # (id, path, snippet)
     unverified: list[dict] = field(default_factory=list)
     uncovered: list[str] = field(default_factory=list)
     inbox_pending: list[str] = field(default_factory=list)
@@ -81,6 +93,7 @@ class CatalogResult:
             "open_conflicts": len(self.conflicts),
             "acknowledged_conflicts": len(self.conflicts_ack),
             "absence_claims": len(self.absence_claims),
+            "coverage_gaps": len(self.coverage_gaps),
             "unverified_sources": len(self.unverified),
             "inbox_pending": len(self.inbox_pending),
             "registry_errors": len(self.registry_errors),
@@ -109,6 +122,22 @@ def _days_old(value, today: datetime.date) -> int | None:
 def _recheck_days(value) -> int | None:
     m = re.match(r"(\d+)\s*d", str(value))
     return int(m.group(1)) if m else None
+
+
+def _first_checkable_claim(body: str) -> str | None:
+    """First quantified-fact snippet in a doc body, skipping fenced code (examples) and
+    disputed/ack marker lines (annotations, not fresh claims). None if the doc makes none."""
+    in_fence = False
+    for line in body.splitlines():
+        if line.lstrip().startswith("```"):
+            in_fence = not in_fence
+            continue
+        if in_fence or any(tok in line for tok in ABSENCE_SKIP_LINE):
+            continue
+        m = CHECKABLE_RE.search(line)
+        if m:
+            return m.group(0).strip()[:60]
+    return None
 
 
 def build(
@@ -203,6 +232,22 @@ def build(
             if cfg.absence_guard and not any(s in line for s in ABSENCE_SKIP_LINE):
                 if any(rx.search(line) for rx in absence_res):
                     res.absence_claims.append((path, i, line.strip()[:140]))
+
+    if cfg.coverage_guard:
+        checked_docs = {c.doc for c in cfg.checks}
+        for d in items:
+            # Coverage is the "correctness layer" promise, which is about AUTHORITATIVE facts.
+            # Skip anything not authoritative (drafts/provisional/reference/transcripts) and any
+            # doc that already has a check.
+            if d.get("kind") != "doc" or d.get("status") != "authoritative" or d["_path"] in checked_docs:
+                continue
+            text = bodies.get(d["_path"], "")
+            block = frontmatter.find_block(text)
+            body = text[block[1] :] if block else text  # skip frontmatter (dates/ids aren't claims)
+            snippet = _first_checkable_claim(body)
+            if snippet:
+                res.coverage_gaps.append((str(d.get("id", d["_path"])), d["_path"], snippet))
+        res.coverage_gaps.sort()
 
     res.unverified = [d for d in items if str(d.get("authority", "curated")).lower() == "unverified"]
     res.items = items

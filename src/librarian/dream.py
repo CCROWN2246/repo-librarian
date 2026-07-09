@@ -71,6 +71,10 @@ class Worklist:
     read_when_todos: list[dict] = field(default_factory=list)
     absence_claims: list[dict] = field(default_factory=list)
     retirement_candidates: list[dict] = field(default_factory=list)
+    # coverage_gaps is advisory backlog: the agent drafts add_check proposals for these
+    # WHEN a dream runs, but it does NOT drive the "dream is due" nudge (avoids fatigue —
+    # many docs carry numbers), so it's excluded from empty()/total().
+    coverage_gaps: list[dict] = field(default_factory=list)
 
     @property
     def empty(self) -> bool:
@@ -99,6 +103,7 @@ class Worklist:
             "read_when_todos": len(self.read_when_todos),
             "absence_claims": len(self.absence_claims),
             "retirement_candidates": len(self.retirement_candidates),
+            "coverage_gaps": len(self.coverage_gaps),
         }
 
     def to_dict(self) -> dict:
@@ -108,6 +113,7 @@ class Worklist:
             "read_when_todos": self.read_when_todos,
             "absence_claims": self.absence_claims,
             "retirement_candidates": self.retirement_candidates,
+            "coverage_gaps": self.coverage_gaps,
             "counts": self.counts(),
         }
 
@@ -206,7 +212,11 @@ def retirement_candidates(entries: list[dict]) -> list[dict]:
 
 
 def _build(
-    entries: list[dict], conflicts: list[dict], absence: list[dict], merge_threshold: float
+    entries: list[dict],
+    conflicts: list[dict],
+    absence: list[dict],
+    coverage: list[dict],
+    merge_threshold: float,
 ) -> Worklist:
     return Worklist(
         open_conflicts=sorted(conflicts, key=lambda c: (c["path"], c["line"])),
@@ -214,13 +224,15 @@ def _build(
         merge_candidates=merge_candidates(entries, merge_threshold),
         read_when_todos=_read_when_todos(entries),
         retirement_candidates=retirement_candidates(entries),
+        coverage_gaps=sorted(coverage, key=lambda c: (c["path"], c.get("id", ""))),
     )
 
 
 def from_catalog_result(res: CatalogResult, merge_threshold: float = DEFAULT_MERGE_SIMILARITY) -> Worklist:
     conflicts = [{"path": p, "line": i, "text": t} for p, i, t in res.conflicts]
     absence = [{"path": p, "line": i, "text": t} for p, i, t in res.absence_claims]
-    return _build(res.items, conflicts, absence, merge_threshold)
+    coverage = [{"id": i, "path": p, "text": t} for i, p, t in res.coverage_gaps]
+    return _build(res.items, conflicts, absence, coverage, merge_threshold)
 
 
 def from_catalog_json(data: dict, merge_threshold: float = DEFAULT_MERGE_SIMILARITY) -> Worklist:
@@ -229,6 +241,7 @@ def from_catalog_json(data: dict, merge_threshold: float = DEFAULT_MERGE_SIMILAR
         data.get("entries", []),
         list(flags.get("open_conflicts", [])),
         list(flags.get("absence_claims", [])),
+        list(flags.get("coverage_gaps", [])),
         merge_threshold,
     )
 

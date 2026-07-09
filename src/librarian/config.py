@@ -104,6 +104,7 @@ class Config:
     required_artifact_fields: list[str] = field(default_factory=lambda: list(DEFAULT_REQUIRED_ART))
     # index
     absence_guard: bool = True
+    coverage_guard: bool = True  # flag docs asserting a checkable fact with no verify check
     absence_extra_patterns: list[str] = field(default_factory=list)
     fail_on: list[str] = field(default_factory=list)
     # warn when CATALOG.md's estimated token cost exceeds this (0 = off).
@@ -273,9 +274,16 @@ def load(root: Path) -> Config:
     idx = _take(
         data.pop("index", {}),
         "[index]",
-        {"absence_guard": bool, "absence_extra_patterns": list, "fail_on": list, "catalog_token_budget": int},
+        {
+            "absence_guard": bool,
+            "coverage_guard": bool,
+            "absence_extra_patterns": list,
+            "fail_on": list,
+            "catalog_token_budget": int,
+        },
     )
     cfg.absence_guard = idx.get("absence_guard", cfg.absence_guard)
+    cfg.coverage_guard = idx.get("coverage_guard", cfg.coverage_guard)
     cfg.absence_extra_patterns = idx.get("absence_extra_patterns", cfg.absence_extra_patterns)
     cfg.fail_on = idx.get("fail_on", cfg.fail_on)
     cfg.catalog_token_budget = idx.get("catalog_token_budget", cfg.catalog_token_budget)

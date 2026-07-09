@@ -182,6 +182,13 @@
         "text": "\"We run about a dozen stations right now.\" <!-- librarian:disputed: librarian:ack conflicts with [verified: 17 active stations, check active"
       }
     ],
+    "coverage_gaps": [
+      {
+        "id": "demo-readme",
+        "path": "README.md",
+        "text": "20 docks"
+      }
+    ],
     "frontmatter_warnings": [],
     "inbox_pending": [
       "vendor-email.md"
@@ -219,6 +226,7 @@
     "acknowledged_conflicts": 1,
     "artifacts": 5,
     "catalogued": 10,
+    "coverage_gaps": 1,
     "docs": 5,
     "domains": 3,
     "flagged": 2,

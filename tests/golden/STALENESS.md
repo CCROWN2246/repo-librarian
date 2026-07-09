@@ -22,3 +22,11 @@ _1 acknowledged conflict(s) — reviewed + intentionally kept._
 |----|------|-----|
 | etl-notes | `docs/etl-notes.md` | status=provisional |
 | ops-interview | `transcripts/ops-interview.md` | has disputed claims |
+
+## Correctness coverage (ADVISORY — checkable facts with no verify check)
+
+_These docs assert a number/count/ID but have no `[[verify.checks]]` entry guarding it, so it can silently drift from its source. Not every hit warrants a check — the point is the missing check is visible. `/librarian-dream` can draft the check for you._
+
+| id | doc | claim |
+|----|-----|-------|
+| demo-readme | `README.md` | 20 docks |

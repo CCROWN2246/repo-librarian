@@ -133,6 +133,15 @@ class WorklistTests(RepoCase):
         _, wl = _wl(self.cfg())
         self.assertEqual(wl.retirement_candidates, [])
 
+    def test_coverage_gaps_in_worklist_but_not_in_nudge(self):
+        # an authoritative doc asserting an unguarded number is a coverage gap...
+        self.write("docs/a.md", make_doc(id="a", read_when="a task") + "\nThe table has 9 columns.\n")
+        _, wl = _wl(self.cfg())
+        self.assertTrue(any(g["path"] == "docs/a.md" for g in wl.coverage_gaps))
+        # ...but coverage alone does NOT make the dream due (no nudge fatigue)
+        self.assertTrue(wl.empty)
+        self.assertEqual(wl.total, 0)
+
     def test_conflicts_and_absence_surface(self):
         body = make_doc(id="c", read_when="x") + (
             "\nclaim <!-- KB-CONTRADICTED: conflicts with [verified: y] -->\n"

@@ -8,7 +8,7 @@ import subprocess
 import sys
 from dataclasses import dataclass, field
 
-from . import registry, verify
+from . import catalog, config, registry, verify
 from .config import Config
 
 
@@ -81,6 +81,22 @@ def run(cfg: Config) -> DoctorReport:
     # Verify sources + checks
     if not cfg.checks:
         rep.warn("no [[verify.checks]] defined — the `verified` tier has nothing backing it yet")
+    if cfg.coverage_guard:
+        try:
+            c_arts, c_errs = registry.load(cfg)
+            res = catalog.build(cfg, config.today(), c_arts, c_errs)
+            gaps = len(res.coverage_gaps)
+        except Exception:  # doctor must never crash on a coverage estimate
+            gaps = 0
+        if gaps:
+            rep.warn(
+                f"{gaps} doc(s) assert a checkable fact with no verify check — correctness coverage gap "
+                "(see STALENESS.md; /librarian-dream can draft the checks)"
+            )
+        else:
+            rep.ok(
+                "correctness coverage: every doc asserting a checkable fact has a verify check (or none do)"
+            )
     for name, src in sorted(cfg.sources.items()):
         used = sum(1 for c in cfg.checks if c.source == name)
         unset = [v for v in src.skip_if_unset if not os.environ.get(v)]
