@@ -27,6 +27,10 @@ If `docs/NAVIGATOR.md` exists, use it to route recurring task types. Then open o
    + `has_disputed_claims: true`, and surfaced to the user. Resolve by Fix (preferred) / `librarian:ack` /
    Archive to `_archive/`. Never silently overwrite a verified fact; never delete the doc.
 
+**Answer questions answer-first** — the answer, then `Confidence:` (the doc's authority, or `N/A` if not
+documented) and `Source:` (path, or `none`). No routing/metadata preamble. When the user asks in plain
+English, run the librarian for them (verify/index/apply); don't make them use the terminal.
+
 **Frontmatter** (every knowledge .md): `id`, `title`, `domain`, `status` (authoritative | provisional |
 draft | reference | retired | archived), `authority` (verified | curated | unverified), `last_verified`
 (YYYY-MM-DD), `recheck` (e.g. 90d), `read_when` (task phrases — the routing signal), `owner`, `tags`.

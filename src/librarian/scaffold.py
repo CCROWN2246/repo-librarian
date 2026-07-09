@@ -245,6 +245,14 @@ def init(root: Path, *, agent: str = "both", index_dir: str = "_index", upgrade:
         )
         _write_managed(
             root,
+            ".claude/commands/librarian-verify.md",
+            _asset("claude/commands/librarian-verify.md"),
+            manifest,
+            report,
+            upgrade=upgrade,
+        )
+        _write_managed(
+            root,
             ".claude/hooks/librarian-session.sh",
             _asset("claude/librarian-session.sh"),
             manifest,
@@ -262,6 +270,9 @@ def init(root: Path, *, agent: str = "both", index_dir: str = "_index", upgrade:
             executable=True,
         )
         _merge_claude_settings(root, report)
+        report.notes.append(
+            "reload Claude Code (restart the session) to pick up the new /librarian-* slash commands"
+        )
 
     _save_manifest(root, index_dir, manifest)
     report.notes.append("activate the git hook once per clone: git config core.hooksPath .githooks")

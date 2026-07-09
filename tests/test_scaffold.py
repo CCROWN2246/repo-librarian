@@ -46,7 +46,10 @@ class InitTests(ScaffoldCase):
             "CLAUDE.md",
             ".claude/commands/librarian.md",
             ".claude/commands/librarian-dream.md",
+            ".claude/commands/librarian-enrich.md",
+            ".claude/commands/librarian-verify.md",
             ".claude/hooks/librarian-session.sh",
+            ".claude/hooks/librarian-prompt.sh",
             ".claude/settings.json",
             "_index/.scaffold.json",
         ):
