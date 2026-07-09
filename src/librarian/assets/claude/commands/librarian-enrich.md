@@ -24,11 +24,10 @@ Read `gaps` and `sources`. **If `gaps` is empty, STOP** — report "no enrichabl
 `sources` lists the `[verify.sources]` you may query. If a gap has no plausible source among them,
 skip it and say so — do not invent a source.
 
-## Step 1 — isolate on a branch
-```
-git switch -c librarian/enrich-$(date +%Y%m%d) 2>/dev/null || git switch -c librarian/enrich-$(date +%Y%m%d)-2
-```
-If the repo isn't clean, stash or abort. Everything below happens here. **Never touch main.**
+## Step 1 — stay on the user's branch (no branch needed)
+Enrichment is propose-only: the drafted doc lives inside an `enrich_create` proposal and isn't written
+until the user approves an apply. So run right where the user is; **do NOT create a separate branch.**
+Uncommitted WIP is fine; leave it alone.
 
 ## Step 2 — per gap: query, then draft (only if the source answered)
 For each gap you can plausibly fill:
@@ -66,22 +65,19 @@ JSON
 Keep drafts short and factual — only what the source supports. Bound the run: do the first ~5 gaps and
 note how many remain.
 
-## Step 3 — report + commit the branch
-`_index/proposals.json` now holds the enrichment proposals. Write `MORNING-REPORT.md` (or append if the
-dream cycle already wrote one): per gap, the source + command + value, the drafted doc's id, and any
-gap you left unfilled (with why — usually "source empty" or "no matching source"). End with:
+## Step 3 — review IN CHAT, apply on approval (no commit)
+`_index/proposals.json` now holds the enrichment proposals. Present them **right here in the chat** — per
+gap: the source + command + extracted value, the drafted doc's id, and any gap you left unfilled (with
+why — usually "source empty" or "no matching source"). Do not commit and do not create a report file;
+proposals are propose-only until the user approves.
 
-> Review each provisional draft. Approve and `librarian apply --only <enrich_id> <check_id>` — the doc
-> lands `status: provisional` (quarantined + TTL-flagged in STALENESS.md until you promote it) and its
-> check runs on every `librarian verify`. Promote a draft by editing `status:` to authoritative once
-> you've reviewed it.
-
-```
-git add _index/proposals.json docs MORNING-REPORT.md && git commit -m "chore(librarian): enrichment drafts $(date +%Y-%m-%d)"
-```
+Ask the user which to apply. When they approve, run `librarian apply --only <enrich_id> <check_id>` — the
+doc lands `status: provisional` (quarantined + TTL-flagged in STALENESS.md until they promote it) and its
+check runs on every `librarian verify`. Tell them: promote a draft by editing `status:` to authoritative
+once they've reviewed it.
 
 ## Invariants (do not violate)
-- Propose-only. Every draft is provisional, source-carried, and paired with a check. No authoritative
-  drafts, no unsourced claims, no edits on main, no drafting when the source came back empty.
+- Propose-only until the user approves. Every draft is provisional, source-carried, and paired with a
+  check. No authoritative drafts, no unsourced claims, no drafting when the source came back empty.
 - Never hand-write a proposal `id` or `base_sha256` — always go through `librarian propose`.
 - If `librarian enrich` reported no gaps, you should have stopped at Step 0.

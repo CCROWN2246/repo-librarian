@@ -1,11 +1,11 @@
 ---
-description: The Librarian's dream cycle — draft maintenance PROPOSALS (conflicts, merges, routing, retirement) as machine-applyable objects on a branch. Propose-only; never touches main.
+description: The Librarian's dream cycle — draft maintenance PROPOSALS (conflicts, merges, routing, retirement) as machine-applyable objects you review in the chat. Propose-only.
 allowed-tools: Bash, Read, Edit, Write
 ---
 You are running the knowledge-base **dream cycle**. Its whole contract is: **propose, never
-apply.** You emit structured *proposal objects* onto a throwaway branch (plus a human-readable
-`MORNING-REPORT.md`); the human reviews, approves, and runs `librarian apply`. You must not edit any
-knowledge doc on the main branch, you must not apply your own proposals, and you must not delete anything.
+apply.** You emit structured *proposal objects* (`_index/proposals.json`), present them to the user right
+here in the chat, and only apply the ones they approve. You must not apply your own proposals, edit a
+knowledge doc, or delete anything until the user picks what to apply.
 
 ## Step 0 — deterministic gate (free; may end here)
 Run from the repo root:
@@ -21,12 +21,11 @@ failure.
 If `due` is `true`, the `worklist` has five buckets. Note the counts; you'll work only the
 non-empty ones.
 
-## Step 1 — isolate on a branch
-```
-git switch -c librarian/dream-$(date +%Y%m%d) 2>/dev/null || git switch -c librarian/dream-$(date +%Y%m%d)-2
-```
-If the repo isn't clean, stash or abort with a note — never mix the user's WIP into a dream branch.
-Everything below happens on this branch. **Do not touch files on main.**
+## Step 1 — stay on the user's branch (no branch needed)
+Dreaming does not change any knowledge doc — it only writes proposal objects to `_index/proposals.json`.
+So run it right where the user is; you will not touch their docs until they approve an apply. **Do NOT
+create a separate dream branch** — that just forces the user to git-dance to review. Uncommitted WIP is
+fine; leave it alone.
 
 ## Step 2 — judge each non-empty bucket, and emit a proposal per decision
 
@@ -49,13 +48,14 @@ JSON
   - Whole doc obsolete? Use an `archive` proposal (shape in D).
 
 **B. Merge candidates** (`worklist.merge_candidates`) — same-domain pairs that *look* similar. Read
-both; if genuinely redundant, first fold the redundant doc's unique content into the canonical one
-(edit it on this branch), then emit:
+both; if genuinely redundant, note the unique content to carry over in `carry_over` and emit the
+proposal. **Do NOT edit the canonical doc yet** — the fold happens at apply time (Step 4), on the user's
+branch, only if they approve:
 ```
 librarian propose <<'JSON'
 {"type":"merge","targets":[{"path":"docs/a.md"},{"path":"docs/b.md"}],
  "action":{"canonical":"docs/a.md","redundant":"docs/b.md","carry_over":["Section X — unique"],"then_archive":true},
- "rationale":"near-duplicate; folded b's unique section into a"}
+ "rationale":"near-duplicate; carry b's unique section into a"}
 JSON
 ```
 If it's a false positive from shared vocabulary, say so in one line and emit nothing.
@@ -83,35 +83,33 @@ If a live doc still depends on it, say so and emit nothing.
 
 Keep it bounded: if a bucket is very large, do the first ~10 and note how many remain.
 
-## Step 3 — write the morning report + commit the branch
-`_index/proposals.json` is now the machine-applyable artifact. Write `MORNING-REPORT.md` at the repo
-root as the human-readable companion: a summary line of counts, one section per job type, and for each
-proposal its file, your recommendation, and its `id` (from `librarian dream`/`propose` output). End
-with a "How to apply" note:
+## Step 3 — do NOT commit (propose-only)
+`_index/proposals.json` is the machine-applyable artifact; the chat (Step 4) is the review channel. Do
+not commit anything and do not create a report file on the user's branch — proposals are propose-only
+until the user approves. When they later approve and apply, the fixes land in their normal working tree,
+and `_index/proposals.json` + `_index/apply-log.jsonl` are the record they commit with their next commit —
+no throwaway branch needed.
 
-> Review each proposal. Approve the ones you agree with and run `librarian apply --only <id> <id>…`
-> (or set `"approved": true` on them in `_index/proposals.json` and `librarian apply --all`). `apply`
-> re-checks each file's staleness guard, applies idempotently, reindexes, and clears the dream nudge
-> when the worklist is empty.
+## Step 4 — review IN CHAT, apply on approval, reset the nudge
+Present the proposals to the user **right here in the chat** — highest-value first, each in one or two
+lines: what it changes, in which file, and why (use the `id` from `librarian propose` output). The user
+never opens a file or touches git to review. Ask them to just say which to apply ("apply the deploy fix
+and the routing one").
 
-Commit the proposals and the report to the branch:
-```
-git add _index/proposals.json MORNING-REPORT.md && git commit -m "chore(librarian): dream-cycle proposals $(date +%Y-%m-%d)"
-```
-
-## Step 4 — reset the nudge, report honestly
-Return to the user's branch (`git switch -`), then:
+When they approve, run `librarian apply --only <id> <id>…` — it applies on their current branch,
+re-checks each staleness guard, applies idempotently, reindexes, and clears the nudge. For a **merge**
+they approved, first fold the `carry_over` content into the canonical doc, then apply (which archives the
+redundant one). Finish with:
 ```
 librarian dream --mark-done
 ```
-Tell the user, in a few lines: which branch the proposals + report are on, the count of proposals per
-type, and the single highest-value item to look at first. If a bucket was empty or every merge
-candidate was a false positive, **say so plainly** — do not manufacture work. Never report
-"maintained" when the honest outcome was "nothing needed doing."
+If a bucket was empty or every merge candidate was a false positive, **say so plainly** — do not
+manufacture work. Never report "maintained" when the honest outcome was "nothing needed doing."
 
 ## Invariants (do not violate)
-- Propose-only. You emit proposal objects and edit only the canonical doc of a merge (to fold content
-  in). No `librarian apply`, no deletions, no changes on main.
-- One branch: proposals.json + one report. Bounded work. Honest, specific reporting.
+- Propose-only until the user approves. You emit proposal objects; you do not run `librarian apply`, edit
+  a doc, or delete anything until the user picks what to apply in the chat.
+- Review happens in the chat; apply happens on the user's current branch. Never make them switch branches
+  or touch git to review. No separate dream branch.
 - Never hand-write a proposal `id` or `base_sha256` — always go through `librarian propose`.
 - If `librarian dream` said not due, you should have stopped at Step 0.

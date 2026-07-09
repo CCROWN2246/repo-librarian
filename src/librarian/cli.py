@@ -83,6 +83,11 @@ def build_parser() -> argparse.ArgumentParser:
     g.add_argument(
         "--uninstall", action="store_true", help="remove unmodified scaffolded assets + managed blocks"
     )
+    sp.add_argument(
+        "--no-commit",
+        action="store_true",
+        help="don't auto-commit the scaffolding (default: commit it when the working tree was clean)",
+    )
 
     sp = sub.add_parser("index", help="rebuild _index/ (CATALOG.md, STALENESS.md, catalog.json)")
     _add_common(sp)
@@ -234,8 +239,29 @@ def _build_catalog(cfg: Config):
     return catalog.build(cfg, config.today(), artifacts, errors)
 
 
+def _git(root: Path, *args: str):
+    import subprocess
+
+    try:
+        return subprocess.run(["git", "-C", str(root), *args], capture_output=True, text=True)
+    except OSError:
+        return None
+
+
+def _git_worktree_clean(root: Path) -> bool | None:
+    """True/False if in a git repo (clean = no tracked-or-untracked changes), None if not a repo."""
+    inside = _git(root, "rev-parse", "--is-inside-work-tree")
+    if inside is None or inside.returncode != 0:
+        return None
+    status = _git(root, "status", "--porcelain")
+    return status is not None and status.returncode == 0 and status.stdout.strip() == ""
+
+
 def cmd_init(args, rep: Reporter) -> int:
     root = (args.root or Path.cwd()).resolve()
+    # Capture cleanliness BEFORE scaffolding: only auto-commit when the tree was clean,
+    # so init can never sweep the user's own uncommitted WIP into its scaffolding commit.
+    was_clean = None if args.uninstall else _git_worktree_clean(root)
     if args.uninstall:
         r = scaffold.uninstall(root)
     else:
@@ -259,7 +285,25 @@ def cmd_init(args, rep: Reporter) -> int:
             rep.say(f"  indexed:     {len(res.items)} entries -> {cfg.index_dir}/")
         except ConfigError as e:
             rep.warn(f"initial index failed: {e}")
+        _maybe_commit_scaffolding(root, was_clean, no_commit=args.no_commit, rep=rep)
     return 0
+
+
+def _maybe_commit_scaffolding(root: Path, was_clean: bool | None, *, no_commit: bool, rep: Reporter) -> None:
+    """Commit the freshly-scaffolded files so the working tree is clean out of the box —
+    but only when it was clean beforehand, so a user's own WIP is never swept in."""
+    if was_clean is None:  # not a git repo
+        return
+    if no_commit or not was_clean:
+        if not was_clean:
+            rep.say("  note:        uncommitted changes present — commit the librarian scaffolding yourself.")
+        return
+    _git(root, "add", "-A")
+    committed = _git(root, "commit", "-m", "chore: scaffold repo-librarian (librarian init)")
+    if committed is not None and committed.returncode == 0:
+        rep.say("  committed:   the scaffolding (working tree was clean).")
+    else:
+        rep.say("  note:        could not auto-commit the scaffolding; commit it yourself.")
 
 
 def _index_summary_line(res) -> str:

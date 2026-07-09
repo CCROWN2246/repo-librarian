@@ -2,8 +2,12 @@ import contextlib
 import io
 import json
 import os
+import shutil
+import subprocess
+import tempfile
 import time
 import unittest
+from pathlib import Path
 
 from helpers import RepoCase, make_doc
 from librarian import cli
@@ -313,6 +317,47 @@ class CliTests(CliCase):
         code, out, _ = self.run_sub("doctor")
         self.assertIn(code, (0, 1))
         self.assertIn("[OK]", out)
+
+
+@unittest.skipUnless(shutil.which("git"), "needs git")
+class InitCommitTests(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name).resolve()
+        self.addCleanup(self._tmp.cleanup)
+        os.environ["LIBRARIAN_TODAY"] = "2026-07-02"
+        self.addCleanup(os.environ.pop, "LIBRARIAN_TODAY", None)
+        self._git("init", "-q")
+        self._git("config", "user.email", "t@t")
+        self._git("config", "user.name", "t")
+
+    def _git(self, *a):
+        return subprocess.run(["git", "-C", str(self.root), *a], capture_output=True, text=True)
+
+    def _run_init(self, *argv):
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            code = cli.main(["init", "--root", str(self.root), *argv])
+        return code, out.getvalue() + err.getvalue()
+
+    def test_clean_repo_autocommits_scaffolding(self):
+        code, _ = self._run_init("--agent", "none")
+        self.assertEqual(code, 0)
+        self.assertEqual(self._git("status", "--porcelain").stdout.strip(), "")  # clean tree after
+        self.assertIn("scaffold repo-librarian", self._git("log", "--oneline").stdout)
+
+    def test_no_commit_flag_leaves_scaffolding_uncommitted(self):
+        code, _ = self._run_init("--agent", "none", "--no-commit")
+        self.assertEqual(code, 0)
+        self.assertNotEqual(self._git("status", "--porcelain").stdout.strip(), "")
+
+    def test_dirty_tree_is_not_swept_in(self):
+        (self.root / "wip.txt").write_text("my work\n", encoding="utf-8")
+        code, _ = self._run_init("--agent", "none")
+        self.assertEqual(code, 0)
+        # the user's WIP is still uncommitted (init did not commit anything)
+        self.assertIn("wip.txt", self._git("status", "--porcelain").stdout)
+        self.assertNotIn("scaffold repo-librarian", self._git("log", "--oneline").stdout or "")
 
 
 if __name__ == "__main__":
