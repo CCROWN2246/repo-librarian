@@ -41,7 +41,7 @@
         "drafted_by": "librarian-dream",
         "source": "worklist:open_conflicts"
       },
-      "rationale": "the KB actually answers this",
+      "rationale": "the catalog actually answers this",
       "risk": {
         "generative": false,
         "reversible": true,
@@ -56,33 +56,6 @@
         }
       ],
       "type": "resolve_absence"
-    },
-    {
-      "action": {
-        "mark": "KB-ACK"
-      },
-      "approved": false,
-      "id": "p_3f9bfb66b03c",
-      "provenance": {
-        "drafted_at": "2026-07-08",
-        "drafted_by": "librarian-dream",
-        "source": "worklist:open_conflicts"
-      },
-      "rationale": "transcript \u2014 keep verbatim",
-      "risk": {
-        "generative": false,
-        "reversible": true,
-        "writes_to": "branch"
-      },
-      "schema_version": "1",
-      "targets": [
-        {
-          "base_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-          "line": 8,
-          "path": "docs/interview.md"
-        }
-      ],
-      "type": "ack"
     },
     {
       "action": {
@@ -181,6 +154,33 @@
         }
       ],
       "type": "archive"
+    },
+    {
+      "action": {
+        "mark": "librarian:ack"
+      },
+      "approved": false,
+      "id": "p_cbb0b64eb647",
+      "provenance": {
+        "drafted_at": "2026-07-08",
+        "drafted_by": "librarian-dream",
+        "source": "worklist:open_conflicts"
+      },
+      "rationale": "transcript \u2014 keep verbatim",
+      "risk": {
+        "generative": false,
+        "reversible": true,
+        "writes_to": "branch"
+      },
+      "schema_version": "1",
+      "targets": [
+        {
+          "base_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "line": 8,
+          "path": "docs/interview.md"
+        }
+      ],
+      "type": "ack"
     },
     {
       "action": {

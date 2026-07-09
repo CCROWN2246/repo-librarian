@@ -10,8 +10,8 @@ If `docs/NAVIGATOR.md` exists, use it to route recurring task types. Then open o
 **Five reflexes** (full reference: `KNOWLEDGE_PROTOCOL.md`):
 1. **Find** — route via CATALOG `domain` + each doc's `read_when` list + grep. Distinctive terms → grep;
    common terms → trust `read_when`/`domain` (the doc that *mentions* a term most is rarely the one
-   *authoritative* for it). Before asserting the KB *lacks* something, positively check the catalog +
-   grep first — a doc can confidently claim a gap the KB fills elsewhere.
+   *authoritative* for it). Before asserting the catalog *lacks* something, positively check the catalog +
+   grep first — a doc can confidently claim a gap the catalog fills elsewhere.
 2. **Re-route on drift** — when the task shifts to a new subsystem/entity/term, re-scan CATALOG before
    answering; don't keep answering from the first docs you opened.
 3. **Freshness gate** — before asserting a fact/number/ID, check the doc's `last_verified` vs `recheck`.
@@ -23,8 +23,8 @@ If `docs/NAVIGATOR.md` exists, use it to route recurring task types. Then open o
 5. **Trust by tier, conflicts by authority — NEVER by recency** — `authority: verified > curated >
    unverified`. An unverified claim (transcript, meeting note) is a claim to verify, not a fact. A
    lower-authority line contradicting a verified fact gets quarantined in place with
-   `<!-- KB-CONTRADICTED: conflicts with [verified: <fact>, <source>]; retained for context, not fact -->`
-   + `has_disputed_claims: true`, and surfaced to the user. Resolve by Fix (preferred) / `KB-ACK` /
+   `<!-- librarian:disputed: conflicts with [verified: <fact>, <source>]; retained for context, not fact -->`
+   + `has_disputed_claims: true`, and surfaced to the user. Resolve by Fix (preferred) / `librarian:ack` /
    Archive to `_archive/`. Never silently overwrite a verified fact; never delete the doc.
 
 **Frontmatter** (every knowledge .md): `id`, `title`, `domain`, `status` (authoritative | provisional |

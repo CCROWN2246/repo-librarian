@@ -42,9 +42,21 @@ class CatalogTests(RepoCase):
         self.assertTrue(any("missing fields" in why for _, _, why in res.stale))
 
     def test_conflict_marker_open_vs_ack(self):
+        # legacy KB- tokens still parse (dual-parse / back-compat)
         body = make_doc(last_verified="2026-07-01") + (
             "\nclaim one <!-- KB-CONTRADICTED: conflicts with [verified: x] -->\n"
             "claim two <!-- KB-CONTRADICTED: KB-ACK conflicts with [verified: y] -->\n"
+        )
+        self.write("docs/a.md", body)
+        _, res = self.build()
+        self.assertEqual(len(res.conflicts), 1)
+        self.assertEqual(len(res.conflicts_ack), 1)
+
+    def test_new_marker_vocab_open_vs_ack(self):
+        # the new product vocab is detected the same way
+        body = make_doc(last_verified="2026-07-01") + (
+            "\nclaim one <!-- librarian:disputed: conflicts with [verified: x] -->\n"
+            "claim two <!-- librarian:disputed: librarian:ack conflicts with [verified: y] -->\n"
         )
         self.write("docs/a.md", body)
         _, res = self.build()

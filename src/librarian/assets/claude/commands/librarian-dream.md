@@ -35,7 +35,7 @@ stdin, hashes the target file for its staleness guard, computes the id, and appe
 `_index/proposals.json`). You supply the judgment; the CLI supplies the determinism. **Omit
 `base_sha256` and `id` — never hand-compute them.** Leave proposals un-approved; the human approves.
 
-**A. OPEN conflicts** (`worklist.open_conflicts`) — each is a quarantined `KB-CONTRADICTED` line.
+**A. OPEN conflicts** (`worklist.open_conflicts`) — each is a quarantined `librarian:disputed` line.
 Open the doc at that line and the *verified source* the marker cites, then emit exactly one of:
 ```
 librarian propose <<'JSON'
@@ -45,7 +45,7 @@ librarian propose <<'JSON'
  "provenance":{"source":"worklist:open_conflicts","drafted_by":"librarian-dream"}}
 JSON
 ```
-  - Contradiction worth keeping verbatim (e.g. a transcript)? Use `{"type":"ack","targets":[{"path":"…","line":34}],"action":{"mark":"KB-ACK"}}`.
+  - Contradiction worth keeping verbatim (e.g. a transcript)? Use `{"type":"ack","targets":[{"path":"…","line":34}],"action":{"mark":"librarian:ack"}}`.
   - Whole doc obsolete? Use an `archive` proposal (shape in D).
 
 **B. Merge candidates** (`worklist.merge_candidates`) — same-domain pairs that *look* similar. Read
@@ -64,7 +64,7 @@ If it's a false positive from shared vocabulary, say so in one line and emit not
   - Routing TODO → propose 2–4 concrete task phrases (the questions a teammate has in mind when this
     doc is the right one to open — tasks, not keywords):
     `librarian propose <<<'{"type":"set_read_when","targets":[{"path":"docs/x.md"}],"action":{"read_when":["when …","before …"]},"rationale":"empty routing"}'`
-  - Absence-claim → positively check the catalog + grep. If the KB fills the gap elsewhere, emit
+  - Absence-claim → positively check the catalog + grep. If the catalog fills the gap elsewhere, emit
     `{"type":"resolve_absence","targets":[{"path":"docs/x.md","line":4}],"action":{"verdict":"stale_claim","filled_by":"docs/y.md"}}`
     (then usually a paired `fix` that edits the claim). If the gap is real, emit
     `{"type":"resolve_absence",…,"action":{"verdict":"confirmed_gap"}}` — informational; it's a candidate for enrichment later.

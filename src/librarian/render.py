@@ -70,8 +70,8 @@ def staleness_md(cfg: Config, res: CatalogResult) -> str:
         f"{len(res.uncovered)} code/data unregistered. Run `librarian verify` for facts-vs-live.",
         "",
         "_Resolve a conflict by: (1) FIXING the doc (correct/remove the line + drop the marker) — the "
-        "repo is the source of truth, so this is preferred; (2) ACKNOWLEDGING it (add `KB-ACK` to the "
-        "marker if intentionally kept); or (3) ARCHIVING the whole doc to "
+        "repo is the source of truth, so this is preferred; (2) ACKNOWLEDGING it (mark the disputed line "
+        "as reviewed if it's intentionally kept); or (3) ARCHIVING the whole doc to "
         f"`{cfg.archive_dir}/` (drops out of the catalog)._",
         "",
     ]
@@ -86,7 +86,7 @@ def staleness_md(cfg: Config, res: CatalogResult) -> str:
         lines += [f"- `{cfg.inbox_dir}/{f}`" for f in res.inbox_pending] + [""]
     if res.conflicts:
         lines += [
-            "## OPEN conflicts (KB-CONTRADICTED — false-now; FIX the doc, or KB-ACK to keep, or archive)",
+            "## OPEN conflicts (disputed claims — false-now; FIX the doc, ACKNOWLEDGE to keep, or archive)",
             "",
             "| doc | line | text |",
             "|-----|------|------|",
@@ -94,7 +94,7 @@ def staleness_md(cfg: Config, res: CatalogResult) -> str:
         lines += [f"| `{p}` | {i} | {t} |" for (p, i, t) in sorted(res.conflicts)] + [""]
     if res.conflicts_ack:
         lines += [
-            f"_{len(res.conflicts_ack)} acknowledged conflict(s) (KB-ACK) — reviewed + intentionally kept._",
+            f"_{len(res.conflicts_ack)} acknowledged conflict(s) — reviewed + intentionally kept._",
             "",
         ]
     if res.orphans:
@@ -121,7 +121,7 @@ def staleness_md(cfg: Config, res: CatalogResult) -> str:
             "## Absence-claims (ADVISORY — sanity-check, not errors)",
             "",
             '_A confidently-stated gap ("not identified", "TBD", "we don\'t have X") can be '
-            "wrong if the KB already fills it elsewhere. Most hits are legitimate (a real "
+            "wrong if the catalog already fills it elsewhere. Most hits are legitimate (a real "
             "TODO/known gap); the point is to eyeball each: does X already exist in the catalog? "
             "Verify positively before trusting._",
             "",

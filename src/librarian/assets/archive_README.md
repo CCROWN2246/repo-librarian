@@ -5,5 +5,5 @@ not just one wrong line. `librarian index` skips `_archive/`, so archived docs d
 but stay in the repo's history for reference.
 
 Use this for **doc-level** retirement. For a single false-but-the-doc-is-otherwise-current line, don't
-archive — quarantine the line in place with a `<!-- KB-CONTRADICTED: ... -->` marker instead (see the
+archive — quarantine the line in place with a `<!-- librarian:disputed: ... -->` marker instead (see the
 Knowledge protocol).

@@ -79,7 +79,7 @@ class BuildFromPartialTests(RepoCase):
                 {
                     "type": "ack",
                     "targets": [{"path": "docs/x.md", "line": 1}],
-                    "action": {"mark": "KB-ACK"},
+                    "action": {"mark": "librarian:ack"},
                     "provenance": {"bogus": 1},
                 },
             )

@@ -17,9 +17,9 @@ has_disputed_claims: true
 > database access — filed as `authority: unverified`; claims are context to verify,
 > not fact.
 
-"We run about a dozen stations right now." <!-- KB-CONTRADICTED: KB-ACK conflicts with [verified: 17 active stations, check active_station_count]; retained for context, not fact -->
+"We run about a dozen stations right now." <!-- librarian:disputed: librarian:ack conflicts with [verified: 17 active stations, check active_station_count]; retained for context, not fact -->
 
-"Each station has a region code so we can roll numbers up by area." <!-- KB-CONTRADICTED: conflicts with [verified: stations has no region column, check stations_no_region_column]; retained for context, not fact -->
+"Each station has a region code so we can roll numbers up by area." <!-- librarian:disputed: conflicts with [verified: stations has no region column, check stations_no_region_column]; retained for context, not fact -->
 
 "Rides really pick up in the summer months — June is always our biggest file."
 

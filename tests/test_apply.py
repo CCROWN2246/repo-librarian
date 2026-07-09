@@ -87,12 +87,14 @@ class MarkerTests(ApplyCase):
     )
 
     def test_ack_adds_marker_and_is_idempotent(self):
+        # MARKED uses the legacy `<!-- KB-CONTRADICTED -->` token -> proves dual-parse:
+        # ack recognizes the old marker and writes the new `librarian:ack` token.
         self.write("d.md", self.MARKED)
-        p = proposals.make("ack", [self.target("d.md", 12)], {"mark": "KB-ACK"})
+        p = proposals.make("ack", [self.target("d.md", 12)], {"mark": "librarian:ack"})
         self.assertEqual(self.apply(p).result, ap.APPLIED)
-        self.assertIn("KB-ACK", self.read("d.md"))
+        self.assertIn("librarian:ack", self.read("d.md"))
         after = self.read("d.md")
-        p2 = proposals.make("ack", [self.target("d.md", 12)], {"mark": "KB-ACK"})
+        p2 = proposals.make("ack", [self.target("d.md", 12)], {"mark": "librarian:ack"})
         self.assertEqual(self.apply(p2).result, ap.NOOP)
         self.assertEqual(self.read("d.md"), after)
 

@@ -22,8 +22,20 @@ ABSENCE_RE = re.compile(
     r"we don'?t have|does ?n'?t exist|no such (?:doc|source|dataset)|never captured)",
     re.I,
 )
-ABSENCE_SKIP_LINE = ("KB-CONTRADICTED", "KB-ACK", "absence-claim", "ABSENCE_")
-CONFLICT_MARKER = "<!-- KB-CONTRADICTED"
+# Conflict markers: the on-disk quarantine format written into doc bodies. New product
+# vocab (`librarian:disputed` / `librarian:ack`) is written going forward; the legacy
+# `KB-` tokens are still PARSED so docs written before the rename keep working (dual-parse).
+DISPUTED_MARKERS = ("<!-- librarian:disputed", "<!-- KB-CONTRADICTED")
+ACK_TOKENS = ("librarian:ack", "KB-ACK")
+CONFLICT_MARKER = DISPUTED_MARKERS[0]  # canonical (new) form for callers that reference it
+ABSENCE_SKIP_LINE = (
+    "KB-CONTRADICTED",
+    "KB-ACK",
+    "librarian:disputed",
+    "librarian:ack",
+    "absence-claim",
+    "ABSENCE_",
+)
 
 
 @dataclass
@@ -184,8 +196,9 @@ def build(
         for i, line in enumerate(body.splitlines(), 1):
             # Require the literal HTML-comment marker form so docs that merely
             # *describe* the convention in prose/backticks don't false-positive.
-            if CONFLICT_MARKER in line:
-                target = res.conflicts_ack if "KB-ACK" in line else res.conflicts
+            if any(m in line for m in DISPUTED_MARKERS):
+                acked = any(a in line for a in ACK_TOKENS)
+                target = res.conflicts_ack if acked else res.conflicts
                 target.append((path, i, line.strip()[:140]))
             if cfg.absence_guard and not any(s in line for s in ABSENCE_SKIP_LINE):
                 if any(rx.search(line) for rx in absence_res):

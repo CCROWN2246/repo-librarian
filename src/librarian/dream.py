@@ -4,7 +4,7 @@ Philosophy (see docs/dream.md): the CLI decides *what* needs judgment — for ze
 tokens — and an agent (`/librarian-dream`) exercises the judgment, propose-only, on a
 branch. Three job types survive scope triage:
 
-  open_conflicts   OPEN KB-CONTRADICTED lines that need a drafted resolution
+  open_conflicts   OPEN disputed-claim lines that need a drafted resolution
   merge_candidates pairs of docs in the same domain whose title/read_when/tags
                    overlap enough to smell like duplicates
   read_when_todos  entries with empty or TODO routing phrases

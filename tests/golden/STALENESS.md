@@ -2,19 +2,19 @@
 
 1 awaiting intake (_inbox) · 2 flagged · 0 orphaned · 1 OPEN conflicts (1 acknowledged) · 0 md need frontmatter · 0 code/data unregistered. Run `librarian verify` for facts-vs-live.
 
-_Resolve a conflict by: (1) FIXING the doc (correct/remove the line + drop the marker) — the repo is the source of truth, so this is preferred; (2) ACKNOWLEDGING it (add `KB-ACK` to the marker if intentionally kept); or (3) ARCHIVING the whole doc to `_archive/` (drops out of the catalog)._
+_Resolve a conflict by: (1) FIXING the doc (correct/remove the line + drop the marker) — the repo is the source of truth, so this is preferred; (2) ACKNOWLEDGING it (mark the disputed line as reviewed if it's intentionally kept); or (3) ARCHIVING the whole doc to `_archive/` (drops out of the catalog)._
 
 ## Inbox — raw docs awaiting intake (triage -> tier -> conflict-check -> frontmatter -> file)
 
 - `_inbox/vendor-email.md`
 
-## OPEN conflicts (KB-CONTRADICTED — false-now; FIX the doc, or KB-ACK to keep, or archive)
+## OPEN conflicts (disputed claims — false-now; FIX the doc, ACKNOWLEDGE to keep, or archive)
 
 | doc | line | text |
 |-----|------|------|
-| `transcripts/ops-interview.md` | 22 | "Each station has a region code so we can roll numbers up by area." <!-- KB-CONTRADICTED: conflicts with [verified: stations has no region c |
+| `transcripts/ops-interview.md` | 22 | "Each station has a region code so we can roll numbers up by area." <!-- librarian:disputed: conflicts with [verified: stations has no regio |
 
-_1 acknowledged conflict(s) (KB-ACK) — reviewed + intentionally kept._
+_1 acknowledged conflict(s) — reviewed + intentionally kept._
 
 ## Flagged (provisional/draft/overdue/disputed/missing-fields)
 

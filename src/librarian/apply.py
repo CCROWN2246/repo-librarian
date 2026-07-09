@@ -24,8 +24,12 @@ from .config import Config
 
 APPLY_LOG = "apply-log.jsonl"
 
-MARKER = "KB-CONTRADICTED"  # the conflict marker token (an on-disk data format; not renamed by B6)
-ACK = "KB-ACK"
+# Conflict-marker tokens (an on-disk data format). New product vocab is written; the
+# legacy KB- tokens are still recognized (dual-parse) so proposals against docs written
+# before the rename still apply.
+DISPUTED_MARKERS = ("<!-- librarian:disputed", "<!-- KB-CONTRADICTED")
+ACK_TOKENS = ("librarian:ack", "KB-ACK")
+ACK_NEW = "librarian:ack"
 
 # Terminal per-proposal results.
 APPLIED, NOOP, STALE, REFUSED, ERROR = "applied", "noop", "stale", "refused", "error"
@@ -53,9 +57,9 @@ class Outcome:
 
 
 def _marker_index(lines: list[str], target_line: int | None) -> int | None:
-    """Index of the KB-CONTRADICTED marker line nearest `target_line` (1-indexed),
-    or the first one if `target_line` is None. Deterministic; line-drift tolerant."""
-    idxs = [i for i, ln in enumerate(lines) if MARKER in ln]
+    """Index of the conflict marker line nearest `target_line` (1-indexed), or the first
+    one if `target_line` is None. Deterministic; line-drift tolerant; dual-parse."""
+    idxs = [i for i, ln in enumerate(lines) if any(m in ln for m in DISPUTED_MARKERS)]
     if not idxs:
         return None
     if target_line is None:
@@ -109,13 +113,14 @@ def _apply_ack(cfg: Config, p: proposals.Proposal, dry: bool) -> tuple[str, str]
     lines = text.split("\n")
     idx = _marker_index(lines, tgt.line)
     if idx is None:
-        return STALE, "no KB-CONTRADICTED marker found near the line; re-dream"
-    if ACK in lines[idx]:
+        return STALE, "no conflict marker found near the line; re-dream"
+    if any(a in lines[idx] for a in ACK_TOKENS):
         return NOOP, "marker already acknowledged"
-    lines[idx] = lines[idx].replace(MARKER, f"{MARKER} {ACK}", 1)
+    disputed = next(m for m in DISPUTED_MARKERS if m in lines[idx])
+    lines[idx] = lines[idx].replace(disputed, f"{disputed} {ACK_NEW}", 1)
     if not dry:
         path.write_text("\n".join(lines), encoding="utf-8")
-    return APPLIED, "acknowledged (KB-ACK added)"
+    return APPLIED, f"acknowledged ({ACK_NEW} added)"
 
 
 def _apply_set_read_when(cfg: Config, p: proposals.Proposal, dry: bool) -> tuple[str, str]:

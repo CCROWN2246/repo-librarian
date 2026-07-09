@@ -23,9 +23,9 @@ session, not just at start:
 1. **Find** — locate knowledge via CATALOG `domain` + each doc's `read_when` + grep; open only the fitting
    doc(s). Distinctive terms → grep nails it; common terms → trust `domain`/`read_when` over raw grep
    (the doc that *mentions* a term most is rarely the one *authoritative* for it).
-   **Absence-claim guard:** before asserting the KB *lacks* something ("not identified", "TBD",
+   **Absence-claim guard:** before asserting the catalog *lacks* something ("not identified", "TBD",
    "no source", "we don't have X"), positively check the catalog (`read_when`/`owner`/`tags`) + grep for
-   X first. A doc can confidently assert a gap the KB itself fills elsewhere — conflict-checking only
+   X first. A doc can confidently assert a gap the catalog itself fills elsewhere — conflict-checking only
    compares claims against verified facts, not absence-claims, so it won't catch this. `librarian index`
    lists confident absence-claims in STALENESS as an advisory table.
 2. **Re-route on drift** — when the task shifts (new subsystem/entity/ungrounded term), re-scan CATALOG +
@@ -45,15 +45,15 @@ session, not just at start:
    **On a conflict, resolve by authority — NEVER by recency:** a higher/equal-authority or freshly
    re-confirmed value wins (update the fact + carry provenance); a **lower-authority claim that contradicts
    a verified fact gets QUARANTINED in place** — keep the doc whole, wrap the false line
-   `<!-- KB-CONTRADICTED: conflicts with [verified: <fact>, <source>]; retained for context, not fact -->`
+   `<!-- librarian:disputed: conflicts with [verified: <fact>, <source>]; retained for context, not fact -->`
    and set `has_disputed_claims: true` in its frontmatter — then **surface it to the user.** Never silently
    overwrite a verified fact; never delete the doc; ambiguous authority → ask. `librarian index` surfaces
    quarantined lines + unverified-tier docs in `_index/STALENESS.md`.
    **Resolving a conflict** (the repo IS the source of truth — uploads are copies, so prefer FIXING over
    hoarding stale tags): (1) **Fix** — correct/remove the false line + delete the marker (preferred);
-   (2) **Acknowledge** — add `KB-ACK` inside the marker if a contradiction is intentionally kept (drops
+   (2) **Acknowledge** — add `librarian:ack` inside the marker if a contradiction is intentionally kept (drops
    off the OPEN list); (3) **Archive** — set `status: archived` and move the whole doc to `_archive/`
-   (excluded from the catalog). Reserve `KB-CONTRADICTED` for a claim that is false-and-misleading-NOW in
+   (excluded from the catalog). Reserve `librarian:disputed` for a claim that is false-and-misleading-NOW in
    a doc meant to be current; a clearly *historical* doc is `status: reference`/`superseded` at the doc
    level, not per-line tagged.
 

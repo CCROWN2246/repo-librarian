@@ -52,7 +52,7 @@ open('tests/golden/proposals.json','w').write(proposals.dump(sample_proposals())
         P.make(
             "ack",
             [T("docs/interview.md", "b" * 64, 8)],
-            {"mark": "KB-ACK"},
+            {"mark": "librarian:ack"},
             provenance=dream,
             rationale="transcript — keep verbatim",
         ),
@@ -92,7 +92,7 @@ open('tests/golden/proposals.json','w').write(proposals.dump(sample_proposals())
             [T("docs/gaps.md", "1" * 64, 4)],
             {"verdict": "stale_claim", "filled_by": "docs/answer.md"},
             provenance=dream,
-            rationale="the KB actually answers this",
+            rationale="the catalog actually answers this",
         ),
         P.make(
             "enrich_create",

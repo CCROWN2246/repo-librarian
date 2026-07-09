@@ -10,7 +10,7 @@ Run the knowledge-base maintenance pass from the repo root and give me a TIGHT s
 Then report:
 - catalogued count;
 - **flagged** docs (provisional/draft/overdue/disputed) — the triage backlog;
-- **OPEN conflicts** (quarantined `KB-CONTRADICTED` lines) — name the doc to fix;
+- **OPEN conflicts** (quarantined disputed-claim lines) — name the doc to fix;
 - `.md` **missing frontmatter** and code/data with **no registry entry** (coverage gaps);
 - anything **awaiting intake** in `_inbox/`;
 - any **DRIFT / CHANGED / ERROR** from verify — for a DRIFT, name the doc it says to update.

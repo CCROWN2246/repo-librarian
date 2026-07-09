@@ -179,7 +179,7 @@
       {
         "line": 20,
         "path": "transcripts/ops-interview.md",
-        "text": "\"We run about a dozen stations right now.\" <!-- KB-CONTRADICTED: KB-ACK conflicts with [verified: 17 active stations, check active_station_c"
+        "text": "\"We run about a dozen stations right now.\" <!-- librarian:disputed: librarian:ack conflicts with [verified: 17 active stations, check active"
       }
     ],
     "frontmatter_warnings": [],
@@ -191,7 +191,7 @@
       {
         "line": 22,
         "path": "transcripts/ops-interview.md",
-        "text": "\"Each station has a region code so we can roll numbers up by area.\" <!-- KB-CONTRADICTED: conflicts with [verified: stations has no region c"
+        "text": "\"Each station has a region code so we can roll numbers up by area.\" <!-- librarian:disputed: conflicts with [verified: stations has no regio"
       }
     ],
     "orphans": [],
