@@ -255,6 +255,50 @@ def update_provenance(cfg: Config, run_result: RunResult, today: date) -> None:
     save_provenance(cfg, records)
 
 
+def failing_checks(cfg: Config) -> list[dict]:
+    """Registered checks currently DRIFT/ERROR per the LAST persisted verify run
+    (provenance.json). Pull-only and cheap — never re-runs a check. This is what lets the
+    greeting / dream surface a failing check without recomputing every source (item 2)."""
+    out = []
+    for cid, r in load_provenance(cfg).items():
+        if r.get("status") in ("DRIFT", "ERROR"):
+            out.append(
+                {
+                    "id": cid,
+                    "doc": r.get("doc", ""),
+                    "status": r.get("status"),
+                    "expect": r.get("expect"),
+                    "live": r.get("live"),
+                    "verified_at": r.get("verified_at"),
+                }
+            )
+    out.sort(key=lambda x: x["id"])
+    return out
+
+
+def accept_expect(cfg: Config, check_id: str, live: str) -> bool:
+    """Update a generated (add_check) assert check's `expect` to `live`. Returns False if the
+    check is NOT in generated-checks.json (i.e. it's hand-written TOML — the caller guides
+    that manual edit, since the zero-dep tool has no TOML writer)."""
+    from . import proposals
+
+    checks = proposals.load_generated_checks(cfg)
+    hit = False
+    for c in checks:
+        if c.get("id") == check_id:
+            c["expect"] = live
+            hit = True
+    if hit:
+        proposals.save_generated_checks(cfg, checks)
+    return hit
+
+
+def last_verified_date(cfg: Config) -> str | None:
+    """Newest verified_at across persisted provenance records (for the staleness nudge)."""
+    dates = [r.get("verified_at") for r in load_provenance(cfg).values() if r.get("verified_at")]
+    return max(dates) if dates else None
+
+
 def stamp_last_verified(cfg: Config) -> None:
     """Epoch stamp read by the session-start freshness nudge. Legacy name/format."""
     out = cfg.path(cfg.index_dir)

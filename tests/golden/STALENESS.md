@@ -4,6 +4,11 @@
 
 _Resolve a conflict by: (1) FIXING the doc (correct/remove the line + drop the marker) — the repo is the source of truth, so this is preferred; (2) ACKNOWLEDGING it (mark the disputed line as reviewed if it's intentionally kept); or (3) ARCHIVING the whole doc to `_archive/` (drops out of the catalog)._
 
+## Correctness (most severe first — details in the sections below)
+
+- **1** open conflict(s)
+- **1** coverage gap(s) — checkable fact, no check
+
 ## Inbox — raw docs awaiting intake (triage -> tier -> conflict-check -> frontmatter -> file)
 
 - `_inbox/vendor-email.md`

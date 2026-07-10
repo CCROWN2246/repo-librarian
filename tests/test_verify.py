@@ -182,5 +182,39 @@ class VerifyTests(RepoCase):
         self.assertEqual(parsed[0]["live"], "1")
 
 
+class FailingCheckSignalTests(RepoCase):
+    def test_failing_checks_reads_provenance(self):
+        cfg = self.cfg()
+        verify.save_provenance(
+            cfg,
+            {
+                "ok": {"check_id": "ok", "status": "PASS", "doc": "a.md"},
+                "bad": {
+                    "check_id": "bad",
+                    "status": "DRIFT",
+                    "expect": "9",
+                    "live": "10",
+                    "doc": "b.md",
+                    "verified_at": "2026-07-01",
+                },
+            },
+        )
+        fc = verify.failing_checks(cfg)
+        self.assertEqual([c["id"] for c in fc], ["bad"])  # only DRIFT/ERROR
+        self.assertEqual(fc[0]["live"], "10")
+        self.assertEqual(verify.last_verified_date(cfg), "2026-07-01")
+
+    def test_accept_expect_updates_generated_check(self):
+        from librarian import proposals
+
+        cfg = self.cfg()
+        proposals.save_generated_checks(
+            cfg, [{"id": "c1", "kind": "assert", "expect": "9", "source": "s", "doc": "d.md"}]
+        )
+        self.assertTrue(verify.accept_expect(cfg, "c1", "10"))
+        self.assertEqual(proposals.load_generated_checks(cfg)[0]["expect"], "10")
+        self.assertFalse(verify.accept_expect(cfg, "nope", "1"))  # unknown -> caller guides TOML edit
+
+
 if __name__ == "__main__":
     unittest.main()

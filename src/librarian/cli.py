@@ -112,6 +112,11 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument(
         "--stamp", action="store_true", help="refresh last_verified in docs whose checks all pass"
     )
+    sp.add_argument(
+        "--accept",
+        metavar="CHECK_ID",
+        help="update an assert check's expect to the current live value (deliberate sign-off)",
+    )
     sp.add_argument("--dry-run", action="store_true", help="don't write any state files")
 
     sp = sub.add_parser("status", help="one-screen health summary")
@@ -368,8 +373,41 @@ def cmd_suggest(args, rep: Reporter) -> int:
     return 0
 
 
+def _verify_accept(cfg: Config, check_id: str, rep: Reporter) -> int:
+    """`verify --accept <id>` (item 10): the guided, on-brand way to change what an assert
+    check counts as correct — vs a raw .librarian.toml edit."""
+    check = next((c for c in cfg.checks if c.id == check_id), None)
+    if check is None:
+        valid = ", ".join(sorted(c.id for c in cfg.checks)) or "(none)"
+        rep.error(f"no check with id {check_id!r} (valid: {valid})")
+        return 2
+    if check.kind != "assert":
+        rep.error(
+            f"check {check_id!r} is kind={check.kind}; --accept is for assert checks "
+            "(track checks use --update-baselines)"
+        )
+        return 2
+    run = verify.run(cfg, only_id=check_id)
+    r = next((x for x in run.results if x.id == check_id), None)
+    if r is None or r.live is None:
+        rep.error(f"could not read a live value for {check_id} (status {r.status if r else '?'})")
+        return 2
+    if verify.accept_expect(cfg, check_id, r.live):
+        verify.update_provenance(cfg, run, config.today())
+        rep.say(f"  accepted: {check_id} expect -> {r.live!r} (generated-checks.json).")
+        rep.say("  You've intentionally changed what counts as correct. Commit to record it.")
+        return 0
+    # Hand-written TOML check: zero-dep tool has no TOML writer — guide the manual edit.
+    rep.say(f"  {check_id} is defined in .librarian.toml — set its expect manually:")
+    rep.say(f'      expect = "{r.live}"')
+    rep.say("  (you're intentionally changing what counts as correct.)")
+    return 0
+
+
 def cmd_verify(args, rep: Reporter) -> int:
     cfg = _resolve_config(args)
+    if args.accept:
+        return _verify_accept(cfg, args.accept, rep)
     run = verify.run(cfg, only_source=args.source, only_id=args.id_glob, only_kind=args.kind)
     actions: list[str] = []
     if not args.dry_run:
@@ -467,6 +505,13 @@ def cmd_status(args, rep: Reporter) -> int:
     attention = []
     if s["open_conflicts"]:
         attention.append(f"{s['open_conflicts']} OPEN conflict(s)")
+    # Item 2: a registered check that STARTED failing (DRIFT/ERROR) must reach the greeting,
+    # not just `librarian why`. Read from provenance.json (cli layer, one cheap file read —
+    # never re-run verify in the hook). Lead with impact, right after conflicts.
+    failing = verify.failing_checks(cfg)
+    if failing:
+        ago = f", as of {failing[0]['verified_at']}" if failing[0].get("verified_at") else ""
+        attention.append(f"{len(failing)} FAILING check(s){ago} — run `librarian verify`")
     if s["orphans"]:
         attention.append(f"{s['orphans']} orphaned registry entr(ies)")
     if s["missing_frontmatter"]:
@@ -747,6 +792,9 @@ def cmd_dream(args, rep: Reporter) -> int:
     cfg = _resolve_config(args)
     res = _build_catalog(cfg)
     wl = dream.from_catalog_result(res, cfg.dream_merge_similarity)
+    # Inject the verify failing-check signal (provenance-sourced, display-only — never
+    # feeds the delta gate). The pure engine stays unaware of verify state (item 2).
+    wl.failing_checks = verify.failing_checks(cfg)
     if args.mark_done:
         dream.mark_done(cfg, wl)
         rep.say(f"marked {wl.total} worklist item(s) reviewed — the dream nudge is reset.")
@@ -759,9 +807,15 @@ def cmd_dream(args, rep: Reporter) -> int:
     rep.say(
         f"dream worklist: {c['open_conflicts']} conflict(s) · {c['merge_candidates']} merge "
         f"candidate(s) · {c['read_when_todos']} routing TODO(s) · {c['absence_claims']} absence-claim(s) "
-        f"· {c['retirement_candidates']} retirement candidate(s) · {c['coverage_gaps']} coverage gap(s)"
+        f"· {c['retirement_candidates']} retirement candidate(s) · {c['coverage_gaps']} coverage gap(s) "
+        f"· {c['failing_checks']} failing check(s)"
     )
     rep.say(f"  {'DUE' if due else 'not due'}: {reason}")
+    if wl.failing_checks:
+        rep.say("  failing checks (verify DRIFT/ERROR — run `librarian verify` to refresh before fixing):")
+        for x in wl.failing_checks:
+            detail = f"expect={x['expect']} live={x['live']}" if x["status"] == "DRIFT" else x["status"]
+            rep.say(f"    {x['id']}  ({detail}) -> {x['doc']}")
     if wl.open_conflicts:
         rep.say("  conflicts:")
         for x in wl.open_conflicts:

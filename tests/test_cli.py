@@ -360,6 +360,21 @@ class InitCommitTests(unittest.TestCase):
         self.assertNotIn("scaffold repo-librarian", self._git("log", "--oneline").stdout or "")
 
 
+class FailingCheckSurfaceTests(CliCase):
+    def test_status_hook_surfaces_failing_check(self):
+        # Item 2: a persisted DRIFT must reach the greeting (status --hook), not just `why`.
+        from librarian import verify
+
+        self.write("docs/a.md", make_doc())
+        self.run_sub("index")
+        verify.save_provenance(
+            self.cfg(),
+            {"bad": {"check_id": "bad", "status": "DRIFT", "doc": "docs/a.md", "verified_at": "2026-07-01"}},
+        )
+        _code, out, _err = self.run_sub("status", "--hook")
+        self.assertIn("FAILING check", out)
+
+
 class IngestSafetyTests(CliCase):
     """W1: fail-loud on the trust tier in a non-interactive (no-TTY) context — the path
     an agent driving the CLI actually hits. The test runner has no TTY, matching it."""

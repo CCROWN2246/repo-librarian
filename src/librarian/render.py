@@ -58,9 +58,10 @@ def catalog_md(cfg: Config, res: CatalogResult) -> str:
     return "\n".join(lines).rstrip("\n") + "\n"
 
 
-def staleness_md(cfg: Config, res: CatalogResult) -> str:
+def staleness_md(cfg: Config, res: CatalogResult, failing: list[dict] | None = None) -> str:
     # Line 3 is the legacy summary line — keep its phrase patterns stable; shell
     # hooks in pre-librarian installs grep it.
+    failing = failing or []
     lines = [
         f"# STALENESS — {GENERATED}",
         "",
@@ -75,6 +76,20 @@ def staleness_md(cfg: Config, res: CatalogResult) -> str:
         f"`{cfg.archive_dir}/` (drops out of the catalog)._",
         "",
     ]
+    # E2 — one severity-ordered roll-up so the correctness signals speak with one voice
+    # (added additively BELOW the compat line 3; the detail sections stay where they are).
+    correctness = []
+    if res.conflicts:
+        correctness.append((len(res.conflicts), "open conflict(s)"))
+    if failing:
+        correctness.append((len(failing), "failing check(s) — verify DRIFT/ERROR"))
+    if res.coverage_gaps:
+        correctness.append((len(res.coverage_gaps), "coverage gap(s) — checkable fact, no check"))
+    if res.absence_claims:
+        correctness.append((len(res.absence_claims), "absence-claim(s) to audit"))
+    if correctness:
+        lines += ["## Correctness (most severe first — details in the sections below)", ""]
+        lines += [f"- **{n}** {label}" for n, label in correctness] + [""]
     if res.registry_errors:
         lines += ["## Registry errors (entries skipped — fix these first)", ""]
         lines += [f"- {e}" for e in res.registry_errors] + [""]
@@ -141,7 +156,21 @@ def staleness_md(cfg: Config, res: CatalogResult) -> str:
             "|----|-----|-------|",
         ]
         lines += [f"| {i} | `{p}` | {t} |" for (i, p, t) in sorted(res.coverage_gaps)] + [""]
-    if not (res.orphans or res.stale or res.conflicts):
+    if failing:
+        lines += [
+            "## Failing checks (verify DRIFT/ERROR — a registered check no longer matches its source)",
+            "",
+            "_Run `librarian verify` to refresh, then fix the doc against the FRESH live value (never the "
+            "cached one) — or `librarian verify --accept <id>` if the new value is the correct one._",
+            "",
+            "| check | status | expect | live | doc |",
+            "|-------|--------|--------|------|-----|",
+        ]
+        lines += [
+            f"| {c['id']} | {c['status']} | {c.get('expect', '-')} | {c.get('live', '-')} | `{c['doc']}` |"
+            for c in failing
+        ] + [""]
+    if not (res.orphans or res.stale or res.conflicts or failing):
         lines.append(
             "Nothing flagged." + (" (See advisory absence-claims above.)" if res.absence_claims else "")
         )
@@ -179,8 +208,11 @@ def catalog_json(res: CatalogResult) -> str:
 
 
 def write_all(cfg: Config, res: CatalogResult) -> None:
+    from . import verify  # local import: render is the I/O layer; verify reads provenance.json
+
     out = cfg.path(cfg.index_dir)
     out.mkdir(parents=True, exist_ok=True)
+    failing = verify.failing_checks(cfg)  # last persisted verify run — cheap, never re-runs
     (out / "CATALOG.md").write_text(catalog_md(cfg, res), encoding="utf-8")
-    (out / "STALENESS.md").write_text(staleness_md(cfg, res), encoding="utf-8")
+    (out / "STALENESS.md").write_text(staleness_md(cfg, res, failing), encoding="utf-8")
     (out / "catalog.json").write_text(catalog_json(res), encoding="utf-8")

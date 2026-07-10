@@ -4,6 +4,18 @@ from helpers import RepoCase, make_doc
 from librarian import catalog, config, dream, registry
 
 
+class FailingChecksBucketTests(unittest.TestCase):
+    def test_excluded_from_gate_and_hash(self):
+        wl = dream.Worklist()
+        h0 = wl.content_hash()
+        wl.failing_checks = [{"id": "c1", "status": "DRIFT", "doc": "d.md", "expect": "9", "live": "10"}]
+        self.assertTrue(wl.empty)  # a failing check does not make the worklist "non-empty"
+        self.assertEqual(wl.total, 0)  # excluded from total
+        self.assertEqual(wl.counts()["failing_checks"], 1)  # but visible in counts/to_dict
+        self.assertIn("failing_checks", wl.to_dict())
+        self.assertEqual(wl.content_hash(), h0)  # never re-arms the delta-gate nudge (eng-review 7)
+
+
 def _wl(cfg):
     arts, errors = registry.load(cfg)
     res = catalog.build(cfg, config.today(), arts, errors)

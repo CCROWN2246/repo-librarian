@@ -75,6 +75,11 @@ class Worklist:
     # WHEN a dream runs, but it does NOT drive the "dream is due" nudge (avoids fatigue —
     # many docs carry numbers), so it's excluded from empty()/total().
     coverage_gaps: list[dict] = field(default_factory=list)
+    # failing_checks are registered verify checks currently DRIFT/ERROR per the last
+    # persisted run (provenance.json). Injected by the CLI layer for DISPLAY only — the
+    # pure engine builders never populate it. Excluded from empty()/total() AND from
+    # content_hash (a verify status-flip must never re-arm the dream nudge — eng-review 7).
+    failing_checks: list[dict] = field(default_factory=list)
 
     @property
     def empty(self) -> bool:
@@ -104,6 +109,7 @@ class Worklist:
             "absence_claims": len(self.absence_claims),
             "retirement_candidates": len(self.retirement_candidates),
             "coverage_gaps": len(self.coverage_gaps),
+            "failing_checks": len(self.failing_checks),
         }
 
     def to_dict(self) -> dict:
@@ -114,11 +120,18 @@ class Worklist:
             "absence_claims": self.absence_claims,
             "retirement_candidates": self.retirement_candidates,
             "coverage_gaps": self.coverage_gaps,
+            "failing_checks": self.failing_checks,
             "counts": self.counts(),
         }
 
     def content_hash(self) -> str:
-        payload = json.dumps(self.to_dict(), sort_keys=True)
+        # Identity for the delta gate EXCLUDES the advisory failing_checks bucket so a
+        # verify status-flip never re-arms the nudge; identical to the pre-failing_checks
+        # hash so existing .last_dream stamps stay valid.
+        d = self.to_dict()
+        d.pop("failing_checks", None)
+        d["counts"] = {k: v for k, v in d["counts"].items() if k != "failing_checks"}
+        payload = json.dumps(d, sort_keys=True)
         return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
