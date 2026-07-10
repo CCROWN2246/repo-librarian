@@ -1,4 +1,4 @@
-# Knowledge base — the librarian protocol
+# The librarian protocol
 
 This repo's knowledge (docs, SQL, notebooks, data, transcripts) is catalogued. **Never read the whole
 corpus** — route through the card catalog at `_index/` and open only what fits the task.

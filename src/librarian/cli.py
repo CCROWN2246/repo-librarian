@@ -233,6 +233,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     sp.add_argument("--dry-run", action="store_true", help="report what would change; write nothing")
 
+    sp = sub.add_parser("todos", help="list pending (unapplied) proposals as a numbered worklist")
+    _add_common(sp)
+
     sp = sub.add_parser("doctor", help="sanity-check config, registry, hooks, and verify sources")
     _add_common(sp)
     return p
@@ -776,6 +779,57 @@ def cmd_ingest(args, rep: Reporter) -> int:
     return 0
 
 
+_TYPE_LABEL = {
+    "fix": "fix a wrong value",
+    "ack": "acknowledge a disputed claim",
+    "archive": "archive a doc",
+    "merge": "merge duplicate docs",
+    "set_read_when": "set routing phrases",
+    "resolve_absence": "resolve an absence-claim",
+    "enrich_create": "draft a provisional doc",
+    "add_check": "add a verify check",
+}
+
+
+def cmd_todos(args, rep: Reporter) -> int:
+    """E3: the deferred/pending proposals ARE the backlog once apply writes state back
+    (item 4). Render them as a numbered, plain-language list; numbers map to ids so an agent
+    can say `apply 1 3` and translate to `apply --only <id> <id>`."""
+    cfg = _resolve_config(args)
+    props = proposals.load(cfg)
+    pending = [p for p in props if not p.applied]
+    applied = [p for p in props if p.applied]
+    if args.json:
+        rep.emit_json(
+            {
+                "pending": [
+                    {"n": i, "id": p.id, "type": p.type, "approved": p.approved, "rationale": p.rationale}
+                    for i, p in enumerate(pending, 1)
+                ],
+                "applied": [
+                    {"id": p.id, "type": p.type, "applied_at": p.applied_at, "result": p.result}
+                    for p in applied
+                ],
+            }
+        )
+        return 1 if pending else 0
+    if not pending:
+        msg = (
+            f"No pending proposals. ({len(applied)} already applied.)"
+            if applied
+            else "No proposals yet — run /librarian-dream to draft some."
+        )
+        rep.say(msg)
+        return 0
+    rep.say(f"{len(pending)} pending proposal(s) — apply by number (e.g. 'apply 1 3') or 'all':")
+    for i, p in enumerate(pending, 1):
+        mark = " ✓approved" if p.approved else ""
+        rep.say(f"  {i}. {_TYPE_LABEL.get(p.type, p.type)}{mark} — {p.rationale or p.id}")
+    if applied:
+        rep.say(f"\n  ({len(applied)} already applied)")
+    return 1
+
+
 def cmd_doctor(args, rep: Reporter) -> int:
     cfg = _resolve_config(args)
     report = doctor.run(cfg)
@@ -1204,6 +1258,7 @@ COMMANDS = {
     "enrich": cmd_enrich,
     "propose": cmd_propose,
     "apply": cmd_apply,
+    "todos": cmd_todos,
     "doctor": cmd_doctor,
 }
 

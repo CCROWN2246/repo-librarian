@@ -7,7 +7,7 @@ and resolve conflicts by authority tier — never by recency.
 
 **At session start, greet with the status.** A `SessionStart` hook runs `librarian status`; when it emits
 a `Librarian: …` line (open conflicts / stale facts / maintenance due), **open your first reply to the
-user by surfacing it** — a short `🗂️ Librarian: <status> — want me to take a look?` so the user actually
+user by surfacing it** — a short `📚 Librarian: <status> — want me to take a look?` so the user actually
 sees it (the hook line only lands in your context, not on their screen). If it emitted nothing, say nothing.
 
 **Answering a knowledge question — lead with the answer, not the plumbing.** Do NOT open with routing or

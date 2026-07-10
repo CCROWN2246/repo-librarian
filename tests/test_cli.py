@@ -375,6 +375,29 @@ class FailingCheckSurfaceTests(CliCase):
         self.assertIn("FAILING check", out)
 
 
+class TodosTests(CliCase):
+    def test_todos_lists_pending_hides_applied(self):
+        from librarian import proposals
+
+        self.write("docs/x.md", make_doc())
+        h = proposals.file_sha256(self.root / "docs/x.md")
+        p1 = proposals.make(
+            "fix",
+            [proposals.Target("docs/x.md", h, 1)],
+            {"replace": {"old": "a", "new": "b"}},
+            rationale="fix the number",
+            approved=True,
+        )
+        p2 = proposals.make("ack", [proposals.Target("docs/x.md", h, 5)], {"mark": "x"}, rationale="ack it")
+        p2.applied, p2.applied_at, p2.result = True, "2026-07-01", "applied"
+        proposals.save(self.cfg(), [p1, p2])
+        code, out, _ = self.run_sub("todos")
+        self.assertEqual(code, 1)  # pending remain
+        self.assertIn("fix the number", out)
+        self.assertNotIn("ack it", out)  # applied is not "pending"
+        self.assertIn("1 already applied", out)
+
+
 class IngestSafetyTests(CliCase):
     """W1: fail-loud on the trust tier in a non-interactive (no-TTY) context — the path
     an agent driving the CLI actually hits. The test runner has no TTY, matching it."""

@@ -16,7 +16,7 @@ version; this file is the full reference.
    those docs before responding** — not the whole corpus.
 
 If the session-start hook emitted a `Librarian: …` status line, **surface it to the user in your first
-reply** (a short "🗂️ Librarian: … — want me to look?"); it only lands in your context otherwise.
+reply** (a short "📚 Librarian: … — want me to look?"); it only lands in your context otherwise.
 
 ## Answering a question — lead with the answer
 Reply answer-first, no routing/metadata preamble:
@@ -24,7 +24,12 @@ Reply answer-first, no routing/metadata preamble:
 - **Confidence:** the doc's `authority` (verified / curated / unverified), or `N/A` if not documented.
 - **Source:** `path/to/doc.md`, or `none` if not documented.
 
-Not documented → say so plainly + why nothing routes; `Confidence: N/A`, `Source: none`; no editorializing.
+Not documented → say so plainly; name the one missing thing (e.g. "no HR domain"), do NOT enumerate every
+other domain as proof. `Confidence: N/A`, `Source: none`; no editorializing.
+
+**Ambiguous routing (no clean `read_when` match):** if the plausible interpretations are COMPLEMENTARY
+(both can be true), answer both, each with its own Confidence/Source — no round-trip. If they'd genuinely
+CONFLICT (mutually exclusive answers), ask one targeted clarifying question first.
 Day-to-day needs no terminal: when the user asks in plain English, run the librarian for them ("check our
 facts" → `librarian verify`; "what's stale?" → `librarian index` + STALENESS; "apply the fix" →
 `librarian apply`). The deliberate rituals are the `/librarian*` slash commands.
@@ -97,13 +102,32 @@ Non-`.md` artifacts (SQL, notebooks, exported data, scripts) can't hold frontmat
 `librarian index` flags any covered-extension file with no registry entry, so coverage gaps surface
 instead of hiding.
 
+## Narration — quiet the mechanism, narrate the meaning
+The librarian's machinery (proposal JSON, `p_…` ids, staleness guards, raw command output) is valuable but
+does NOT need to be *visible*. When you run a `/librarian-*` ritual:
+- Run the CLI quietly. Do NOT paste raw tool-call payloads, heredoc JSON, or `p_xxxx` ids into the chat.
+- Narrate the meaningful moments in plain language, and **lead with impact**: "1 conflict to fix" first,
+  then collapse the rest under "N minor housekeeping items" — not a flat table of equal-weight peers.
+- **Reference proposals by NUMBER, never raw id.** Present a numbered list; when the user says "apply 1 3",
+  translate to `librarian apply --only <id> <id>` internally. Keep this human-readable framing EVERYWHERE
+  proposals are mentioned — the first table, later check-ins, and any "still pending" wrap-up.
+- **Suggested action on a live dispute:** when a question surfaces an open dispute, end with a
+  `Suggested action:` line offering to fix it there ("I can update the doc + clear the marker — say the
+  word"), gated on the user's go-ahead.
+- **Partial completion:** when only some proposals get applied, offer a third path besides apply/drop —
+  "…or keep them as TODOs?" (they persist in `proposals.json` and resurface; `librarian todos` lists them).
+
 ## Commands
 - `librarian index` — regenerate `_index/` (CATALOG.md + STALENESS.md + catalog.json).
-- `librarian verify` — fact-check doc claims against their live sources (DRIFT names the doc to fix).
-- `librarian status` — one-screen health summary (also the session-start hook).
+- `librarian verify` — fact-check doc claims against their live sources (DRIFT names the doc to fix);
+  `--accept <id>` signs off a new value as correct for an assert check.
+- `librarian status` — one-screen health summary (also the session-start hook; surfaces failing checks).
 - `librarian search <task phrase>` — rank docs by `read_when`/`tags`/`title`/`domain` match.
 - `librarian backfill <dir> --write` — bulk-stamp skeleton frontmatter onto un-annotated docs.
-- `librarian ingest <file>` — triage an `_inbox/` upload (tier → frontmatter → file it).
-- `librarian dream` — build the deterministic maintenance worklist (conflicts, merge candidates,
-  routing TODOs, absence-claims); drives the `/librarian-dream` propose-only cycle. `status` nudges when due.
+- `librarian ingest <file> --authority <tier>` — triage an `_inbox/` upload (tier → frontmatter → file it);
+  in a no-TTY/agent context it REFUSES without `--authority` (never guesses the trust tier); `--dry-run`
+  previews. After filing anything below `verified`, conflict-check it against existing verified facts.
+- `librarian dream` — build the deterministic maintenance worklist (conflicts, merge candidates, routing
+  TODOs, absence-claims, failing checks); drives the `/librarian-dream` propose-only cycle.
+- `librarian todos` — the pending (unapplied) proposals as a numbered worklist.
 - `librarian doctor` — sanity-check config, registry, hooks, and verify sources.

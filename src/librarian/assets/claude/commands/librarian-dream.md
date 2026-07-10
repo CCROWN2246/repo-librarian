@@ -109,13 +109,14 @@ no throwaway branch needed.
 ## Step 4 — review IN CHAT, apply on approval, reset the nudge
 Present the proposals to the user **right here in the chat** — highest-value first, each in one or two
 lines: what it changes, in which file, and why (use the `id` from `librarian propose` output). The user
-never opens a file or touches git to review. Ask them to just say which to apply ("apply the deploy fix
-and the routing one").
+never opens a file or touches git to review. Present the proposals as a **numbered list** (never raw
+`p_…` ids); let them say "apply 1 and 3" or "apply all," and translate numbers back to ids yourself.
 
 When they approve, run `librarian apply --only <id> <id>…` — it applies on their current branch,
-re-checks each staleness guard, applies idempotently, reindexes, and clears the nudge. For a **merge**
-they approved, first fold the `carry_over` content into the canonical doc, then apply (which archives the
-redundant one). Finish with:
+re-checks each staleness guard, applies idempotently, reindexes, and clears the nudge. For a **merge**,
+apply now OWNS the `carry_over` fold into the canonical (do NOT hand-edit it first — that would trip the
+staleness guard); apply folds it idempotently, then archives the redundant one. If only some proposals get
+applied, offer to keep the rest as TODOs (`librarian todos` lists them). Finish with:
 ```
 librarian dream --mark-done
 ```
