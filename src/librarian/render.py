@@ -90,6 +90,15 @@ def staleness_md(cfg: Config, res: CatalogResult, failing: list[dict] | None = N
     if correctness:
         lines += ["## Correctness (most severe first — details in the sections below)", ""]
         lines += [f"- **{n}** {label}" for n, label in correctness] + [""]
+    if res.navigator_unconfigured:
+        lines += [
+            "## Routing hub not configured",
+            "",
+            f"_`{res.navigator_unconfigured}` is a Tier-1 'always load' file but still carries the scaffold "
+            "template (bracketed examples). It costs a read every session with no routing payoff. Fill in "
+            "the real task→doc rows and set `status: authoritative`._",
+            "",
+        ]
     if res.registry_errors:
         lines += ["## Registry errors (entries skipped — fix these first)", ""]
         lines += [f"- {e}" for e in res.registry_errors] + [""]

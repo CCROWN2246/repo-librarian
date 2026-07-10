@@ -28,6 +28,10 @@ ABSENCE_RE = re.compile(
 DISPUTED_MARKERS = ("<!-- librarian:disputed", "<!-- KB-CONTRADICTED")
 ACK_TOKENS = ("librarian:ack", "KB-ACK")
 CONFLICT_MARKER = DISPUTED_MARKERS[0]  # canonical (new) form for callers that reference it
+# A NAVIGATOR that still carries this line from the scaffold template is unconfigured — a
+# Tier-1 "always load" file costing a read with no routing payoff. Flag it distinctly rather
+# than as a generic overdue-draft, so "fill the routing hub" is the visible action.
+NAVIGATOR_SENTINEL = "This is a TEMPLATE"
 ABSENCE_SKIP_LINE = (
     "KB-CONTRADICTED",
     "KB-ACK",
@@ -62,6 +66,7 @@ class CatalogResult:
     conflicts_ack: list[tuple[str, int, str]] = field(default_factory=list)
     absence_claims: list[tuple[str, int, str]] = field(default_factory=list)
     coverage_gaps: list[tuple[str, str, str]] = field(default_factory=list)  # (id, path, snippet)
+    navigator_unconfigured: str | None = None  # path of a Tier-1 NAVIGATOR still on the scaffold template
     unverified: list[dict] = field(default_factory=list)
     uncovered: list[str] = field(default_factory=list)
     inbox_pending: list[str] = field(default_factory=list)
@@ -219,6 +224,11 @@ def build(
             res.stale.append((str(d.get("id", d["_path"])), d["_path"], "; ".join(reasons)))
 
     res.uncovered = scanner.uncovered(cfg, all_files, reg_paths)
+
+    for path, body in bodies.items():
+        if path.rsplit("/", 1)[-1] == "NAVIGATOR.md" and NAVIGATOR_SENTINEL in body:
+            res.navigator_unconfigured = path
+            break
 
     for path in md:
         body = bodies.get(path)

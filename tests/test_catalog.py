@@ -17,6 +17,17 @@ class CatalogTests(RepoCase):
         self.assertEqual(res.stale, [])
         self.assertEqual(res.missing_fm, [])
 
+    def test_unconfigured_navigator_flagged(self):
+        self.write("docs/NAVIGATOR.md", make_doc(id="navigator") + "\nThis is a TEMPLATE — replace it.\n")
+        _, res = self.build()
+        self.assertTrue(res.navigator_unconfigured.endswith("docs/NAVIGATOR.md"))
+        self.assertIn("Routing hub not configured", render.staleness_md(self.cfg(), res))
+
+    def test_configured_navigator_not_flagged(self):
+        self.write("docs/NAVIGATOR.md", make_doc(id="navigator", status="authoritative") + "\nreal rows\n")
+        _, res = self.build()
+        self.assertIsNone(res.navigator_unconfigured)
+
     def test_missing_frontmatter(self):
         self.write("docs/plain.md", "# no frontmatter\n")
         _, res = self.build()
