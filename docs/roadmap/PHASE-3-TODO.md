@@ -45,6 +45,40 @@ current dream/enrich branch. NOT urllib+token, NOT an auto-on-push GitHub Action
 - Reversible/no-op if not in a git repo or `gh` missing. Default off / never automatic.
 - Tests: `--dry-run` renders the checklist deterministically; skips cleanly without `gh`.
 
+## D4 — Overnight / async dream automation (+ the "dream" rename decision)
+
+**What:** decide (and then build) how the dream cycle runs *unattended*, and resolve the naming that
+depends on that decision. Today `/librarian-dream` is fully **synchronous and in-chat** — the user runs
+it and watches it happen, start to finish.
+
+**Why (flagged twice, round 1 + round 2):** the name "dream" implies something *passive / overnight /
+in the background*, but nothing about the current flow is. The mismatch is a **symptom of an unmade
+product decision**, not a naming bug: is this ritual eventually async, or forever a synchronous cleanup
+you run and watch? Renaming before answering that would pre-commit the answer by cosmetics. A "morning
+report" only delivers value if it's actually *waiting* in the morning — today it's a manual command.
+
+**The fork (decide first, in a design session):**
+- **(a) Make it genuinely async.** A scheduled/background job drafts proposals while the user is away
+  (propose-only, never auto-apply beyond the trust-ladder cap), so a real report is waiting at session
+  start. Then "dream" is *accurate* and stays.
+- **(b) Keep it synchronous and rename.** Retire the sleep/dream metaphor for an active-ritual name
+  (e.g. `/librarian-sweep`, `/librarian-tidy`) with a dual-alias for back-compat. Cheap while the
+  consumer count is ~1.
+
+**Design considerations for (a):**
+- Overnight trigger *without the laptop on* — cron on a server / CI schedule / a hosted runner; the
+  local hooks can't fire when the machine is asleep. Ties into the same scheduling story as a future
+  nightly `verify`.
+- **Resumed-session detection:** when a new report was generated while away, the SessionStart greeting
+  should notice it and surface "a dream report is waiting" (a new `_index/` artifact + a freshness check),
+  distinct from the live `status --hook` nudge.
+- **Keep the manual `/librarian-dream` as the fallback** — async is additive, never the only path.
+- Propose-only invariant holds: an unattended run drafts to `proposals.json`, it does not apply.
+
+**Decision owner:** Chris, in a Phase-3 design session. Parked deliberately from the round-2 hardening
+batch (FEEDBACK2 marks it out-of-scope for that round). The in-chat / apply-on-current-branch model
+already solved the *solo* review pain; this is the team/scheduling story on top.
+
 ## Housekeeping (not blocked on the above)
 
 - **Regenerate the demo golden for `provenance.json`** — `verify` now emits it; the demo `_index/` +
