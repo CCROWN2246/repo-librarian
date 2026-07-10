@@ -66,6 +66,39 @@ class IngestTests(RepoCase):
         self.assertIn('path = "data/export.csv"', r.artifact_block)
         self.assertTrue((self.root / "data" / "export.csv").exists())
 
+    def test_dest_md_path_rejected(self):
+        self.write("_inbox/x.md", "new\n")
+        with self.assertRaises(ValueError):
+            ingest.ingest_file(
+                self.cfg(),
+                "x.md",
+                domain="d",
+                status="reference",
+                authority="unverified",
+                dest="docs/x.md",  # a file path, not a directory
+                recheck="90d",
+                today=config.today(),
+            )
+        self.assertFalse((self.root / "docs" / "x.md").exists())
+
+    def test_dry_run_previews_without_writing(self):
+        self.write("_inbox/x.md", "# X\n\nbody\n")
+        r = ingest.ingest_file(
+            self.cfg(),
+            "x.md",
+            domain="d",
+            status="reference",
+            authority="unverified",
+            dest="docs",
+            recheck="90d",
+            today=config.today(),
+            dry_run=True,
+        )
+        self.assertIsNotNone(r.preview)
+        self.assertIn("authority: unverified", r.preview)
+        self.assertTrue((self.root / "_inbox" / "x.md").exists())  # not moved
+        self.assertFalse((self.root / "docs" / "x.md").exists())
+
     def test_collision_refuses(self):
         self.write("_inbox/x.md", "new\n")
         self.write("docs/x.md", "old\n")

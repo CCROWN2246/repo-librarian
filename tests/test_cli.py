@@ -10,7 +10,7 @@ import unittest
 from pathlib import Path
 
 from helpers import RepoCase, make_doc
-from librarian import cli
+from librarian import cli, frontmatter
 
 
 class CliCase(RepoCase):
@@ -358,6 +358,54 @@ class InitCommitTests(unittest.TestCase):
         # the user's WIP is still uncommitted (init did not commit anything)
         self.assertIn("wip.txt", self._git("status", "--porcelain").stdout)
         self.assertNotIn("scaffold repo-librarian", self._git("log", "--oneline").stdout or "")
+
+
+class IngestSafetyTests(CliCase):
+    """W1: fail-loud on the trust tier in a non-interactive (no-TTY) context — the path
+    an agent driving the CLI actually hits. The test runner has no TTY, matching it."""
+
+    def test_no_tty_no_authority_refuses(self):
+        self.write("_inbox/customer-call-notes.md", "# Call\n\nEnterprise tier, prorated billing.\n")
+        code, _out, err = self.run_sub("ingest", "customer-call-notes.md")
+        self.assertEqual(code, 2)
+        self.assertIn("no TTY and no --authority", err)
+        self.assertIn("suggested: unverified", err)  # E4 cue: "call"/"notes" -> unverified
+        # nothing filed, nothing clobbered
+        self.assertTrue((self.root / "_inbox" / "customer-call-notes.md").exists())
+        self.assertFalse((self.root / "docs" / "customer-call-notes.md").exists())
+
+    def test_explicit_authority_files_and_discloses_domain_default(self):
+        self.write("_inbox/notes.md", "# Notes\n\nsomething\n")
+        code, out, _err = self.run_sub("ingest", "notes.md", "--authority", "unverified")
+        self.assertEqual(code, 0)
+        self.assertIn("filed:", out)
+        self.assertIn("default(s) used", out)  # domain=uncategorized disclosed
+        self.assertIn("conflict-check", out)  # D3 reminder for below-verified
+        meta = frontmatter.parse(self.read("docs/notes.md")).meta
+        self.assertEqual(meta["authority"], "unverified")
+
+    def test_verified_tier_skips_conflict_reminder(self):
+        self.write("_inbox/spec.md", "# Spec\n")
+        code, out, _ = self.run_sub("ingest", "spec.md", "--authority", "verified", "--domain", "eng")
+        self.assertEqual(code, 0)
+        self.assertNotIn("conflict-check", out)
+
+    def test_dry_run_writes_nothing(self):
+        self.write("_inbox/notes.md", "# Notes\n")
+        code, out, _ = self.run_sub("ingest", "notes.md", "--authority", "curated", "--dry-run")
+        self.assertEqual(code, 0)
+        self.assertIn("DRY RUN", out)
+        self.assertTrue((self.root / "_inbox" / "notes.md").exists())  # not moved
+        self.assertFalse((self.root / "docs" / "notes.md").exists())
+
+    def test_dest_md_path_errors(self):
+        self.write("_inbox/notes.md", "# Notes\n")
+        code, _out, err = self.run_sub(
+            "ingest", "notes.md", "--authority", "unverified", "--dest", "docs/notes.md"
+        )
+        self.assertEqual(code, 2)
+        self.assertIn("--dest is a directory", err)
+        self.assertFalse((self.root / "docs" / "notes.md").is_dir())
 
 
 if __name__ == "__main__":

@@ -21,6 +21,7 @@ from . import (
     doctor,
     dream,
     enrich,
+    frontmatter,
     ingest,
     proposals,
     registry,
@@ -149,9 +150,14 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument(
         "--authority", default=None, help="trust tier from provenance (transcripts/third-party: unverified)"
     )
-    sp.add_argument("--dest", default="docs")
+    sp.add_argument("--dest", default="docs", help="destination DIRECTORY (filename is appended)")
     sp.add_argument("--recheck", default="90d")
     sp.add_argument("--yes", action="store_true", help="accept defaults, no prompts")
+    sp.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="show what would be filed (path/tier/frontmatter); write nothing",
+    )
 
     sp = sub.add_parser(
         "dream", help="build the deterministic maintenance worklist (drives /librarian-dream)"
@@ -621,6 +627,19 @@ def _prompt(question: str, default: str, *, yes: bool) -> str:
     return answer or default
 
 
+def _suggest_authority(name: str) -> str:
+    """Advisory trust-tier suggestion from source cues (E4). NEVER auto-applied — it
+    only informs the refusal message + --dry-run. Safe-by-default: unknown -> unverified."""
+    low = name.lower()
+    unverified_cues = ("transcript", "call", "slack", "standup", "meeting", "recap", "notes", "chat")
+    if any(c in low for c in unverified_cues):
+        return "unverified"
+    curated_cues = ("guide", "spec", "readme", "policy", "runbook", "design", "doc")
+    if any(c in low for c in curated_cues):
+        return "curated"
+    return "unverified"
+
+
 def cmd_ingest(args, rep: Reporter) -> int:
     cfg = _resolve_config(args)
     if args.file is None:
@@ -633,9 +652,26 @@ def cmd_ingest(args, rep: Reporter) -> int:
             rep.say(f"  {f}")
         rep.say("\nIngest one with: librarian ingest <file> [--domain X --authority unverified --dest docs]")
         return 0
+
+    # Item 1 (CRITICAL): the trust tier is the one decision that must never be a silent
+    # default. In a non-interactive context (agent-driven; no TTY) the walkthrough is
+    # unreachable, so REFUSE rather than guess. Filing location gets safe defaults; the
+    # trust tier does not.
+    non_interactive = args.yes or not sys.stdin.isatty()
+    if non_interactive and args.authority is None:
+        suggested = _suggest_authority(args.file)
+        rep.error(
+            f"no TTY and no --authority given — refusing to guess the trust tier for {args.file}.\n"
+            f"  Re-run with --authority (suggested: {suggested}).\n"
+            "  Tiers: verified / curated / unverified — transcripts & third-party notes are unverified."
+        )
+        return 2
+
     domain = args.domain or _prompt("domain", "uncategorized", yes=args.yes)
+    # Defense-in-depth: even the interactive/enter fallback defaults to unverified, matching
+    # the tool's own policy (transcripts are unverified), never the trusting `curated`.
     authority = args.authority or _prompt(
-        "authority (verified/curated/unverified — transcripts are unverified)", "curated", yes=args.yes
+        "authority (verified/curated/unverified — transcripts are unverified)", "unverified", yes=args.yes
     )
     dest = args.dest or _prompt("destination directory", "docs", yes=args.yes)
     try:
@@ -648,14 +684,44 @@ def cmd_ingest(args, rep: Reporter) -> int:
             dest=dest,
             recheck=args.recheck,
             today=config.today(),
+            dry_run=args.dry_run,
         )
-    except (FileNotFoundError, FileExistsError) as e:
+    except (FileNotFoundError, FileExistsError, ValueError) as e:
         rep.error(str(e))
         return 2
+
+    if args.dry_run:
+        rep.say(f"  DRY RUN — would file {cfg.inbox_dir}/{args.file} -> {result.moved_to}")
+        rep.say(f"  domain={domain}  authority={authority}  status={args.status}")
+        if result.preview:
+            block = frontmatter.find_block(result.preview)
+            head = result.preview[: block[1]] if block else result.preview[:400]
+            rep.say("  frontmatter it would write:\n" + "\n".join("    " + ln for ln in head.splitlines()))
+        rep.say("\n  Nothing written. Re-run without --dry-run to file it.")
+        return 0
+
+    # Disclose any silently-used defaults so a filed doc can't quietly inherit the wrong
+    # tier/domain without a visible note (item 1, part c).
+    defaults_used = []
+    if args.domain is None:
+        defaults_used.append(f"domain={domain}")
+    if args.authority is None:
+        defaults_used.append(f"authority={authority}")
     rep.say(
         f"  filed: {cfg.inbox_dir}/{args.file} -> {result.moved_to}"
         + (" (frontmatter added)" if result.frontmatter_added else "")
     )
+    if defaults_used:
+        rep.say(
+            f"  NOTE: default(s) used ({', '.join(defaults_used)}) — no flags given; REVIEW before trusting."
+        )
+    # D3 (item 5): conflict-check is an agent reflex with no CLI backstop — make it a
+    # required, unmissable next step for anything below the `verified` tier.
+    if str(authority).lower() != "verified":
+        rep.say(
+            "  NEXT (required): conflict-check this against existing verified facts before trusting it — "
+            "if it contradicts one, quarantine it with a librarian:disputed marker."
+        )
     if result.artifact_block:
         rep.say(f"\n  non-markdown artifact — add this entry to {cfg.artifacts_file}:\n")
         rep.say(result.artifact_block)
