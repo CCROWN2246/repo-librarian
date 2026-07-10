@@ -162,6 +162,29 @@ class ProposeCliTests(ProposeCase):
         self.assertEqual(json.loads(out.getvalue())["applied"], 1)
         self.assertIn("is 17", self.read("docs/x.md"))
 
+    def test_apply_writes_back_applied_and_second_apply_is_noop(self):
+        # Item 4: proposals.json is the single source of truth for "pending". After apply,
+        # the entry is marked applied and a fresh `apply --all` re-selects nothing.
+        self.write("docs/x.md", "the value is 20 today\n")
+        partial = json.dumps(
+            {
+                "type": "fix",
+                "targets": [{"path": "docs/x.md", "line": 1}],
+                "action": {"replace": {"old": "is 20", "new": "is 17"}},
+            }
+        )
+        self.run_sub("propose", "--approved", stdin=partial)
+        self.run_sub("apply", "--all")
+        data = json.loads(self.read("_index/proposals.json"))
+        entry = data["proposals"][0]
+        self.assertTrue(entry["applied"])
+        self.assertEqual(entry["applied_at"], self.TODAY)  # injectable date, deterministic
+        # a second apply --all now selects nothing (done work does not re-surface)
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(io.StringIO()):
+            cli.main(["apply", "--root", str(self.root), "--all", "--json"])
+        self.assertEqual(json.loads(out.getvalue())["applied"], 0)
+
 
 if __name__ == "__main__":
     unittest.main()

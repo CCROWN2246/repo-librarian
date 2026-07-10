@@ -177,6 +177,63 @@ class MergeTests(ApplyCase):
         self.assertTrue((self.root / "docs/a.md").exists())
         self.assertTrue((self.root / "docs/b.md").exists())  # nothing moved
 
+    def test_merge_folds_carry_over_into_canonical(self):
+        # Item 3: apply OWNS the fold now (no hand-edit first). The carry_over text lands
+        # in the canonical, and the merge does NOT false-STALE on its own edit.
+        p = self._pair()
+        oc = self.apply(p)
+        self.assertEqual(oc.result, ap.APPLIED)
+        self.assertIn("Section X", self.read("docs/a.md"))
+
+    def test_merge_refuses_external_canonical_change(self):
+        self.write("docs/a.md", make_doc(id="a", title="A"))
+        self.write("docs/b.md", make_doc(id="b", title="B"))
+        draft_hash = proposals.file_sha256(self.root / "docs/a.md")
+        # someone edits the canonical externally after drafting (and carry not yet folded)
+        self.write("docs/a.md", make_doc(id="a", title="A edited elsewhere"))
+        p = proposals.make(
+            "merge",
+            [self.target("docs/b.md")],  # only the redundant is a generic-guarded target
+            {
+                "canonical": "docs/a.md",
+                "redundant": "docs/b.md",
+                "carry_over": ["Section X"],
+                "canonical_sha256": draft_hash,
+                "then_archive": True,
+            },
+        )
+        oc = self.apply(p)
+        self.assertEqual(oc.result, ap.STALE)
+        self.assertIn("canonical", oc.detail)
+        self.assertTrue((self.root / "docs/b.md").exists())  # nothing moved
+
+
+class WritebackSelectTests(ApplyCase):
+    def _ack(self, approved=True):
+        self.write("docs/x.md", make_doc())
+        return proposals.make(
+            "ack", [self.target("docs/x.md", line=3)], {"mark": "librarian:disputed"}, approved=approved
+        )
+
+    def test_all_skips_applied(self):
+        p = self._ack()
+        self.assertEqual([q.id for q in ap.select([p], only=None, all_approved=True)], [p.id])
+        p.applied = True  # item 4: once applied, --all must not re-select it
+        self.assertEqual(ap.select([p], only=None, all_approved=True), [])
+        # --only is explicit: re-apply is still allowed
+        self.assertEqual([q.id for q in ap.select([p], only={p.id}, all_approved=False)], [p.id])
+
+    def test_applied_fields_roundtrip_and_id_stable(self):
+        p = self._ack()
+        self.assertNotIn("applied", p.to_dict())  # unapplied serializes as before
+        p.applied, p.applied_at, p.result = True, "2026-07-10", "applied"
+        d = p.to_dict()
+        self.assertEqual((d["applied"], d["applied_at"], d["result"]), (True, "2026-07-10", "applied"))
+        p2 = proposals.from_dict(d)
+        self.assertTrue(p2.applied)
+        self.assertEqual(p2.applied_at, "2026-07-10")
+        self.assertEqual(p2.id, p.id)  # writeback fields never move the id
+
 
 class AddCheckTests(ApplyCase):
     def test_registers_and_config_sees_it(self):

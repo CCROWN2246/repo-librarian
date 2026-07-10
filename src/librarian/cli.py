@@ -979,20 +979,25 @@ def cmd_propose(args, rep: Reporter) -> int:
         rep.error(f"invalid JSON: {e}")
         return 2
     partials = data if isinstance(data, list) else [data]
+    existing = proposals.load(cfg)
+    existing_ids = {p.id for p in existing}
     built = [proposals.build_from_partial(cfg, pt, approved=args.approved) for pt in partials]
-    merged = proposals.upsert(proposals.load(cfg), built)
+    replaced = [p.id for p in built if p.id in existing_ids]
+    merged = proposals.upsert(existing, built)
     proposals.save(cfg, merged)
     if args.json:
         rep.emit_json(
             {
                 "added": [p.id for p in built],
+                "replaced": replaced,
                 "total": len(merged),
                 "proposals": [p.to_dict() for p in built],
             }
         )
     else:
         for p in built:
-            rep.say(f"  proposed {p.type} {p.id}{' (approved)' if p.approved else ''} — {p.rationale}")
+            verb = "replaced" if p.id in existing_ids else "proposed"
+            rep.say(f"  {verb} {p.type} {p.id}{' (approved)' if p.approved else ''} — {p.rationale}")
         rep.say(f"  {len(merged)} proposal(s) now in {cfg.index_dir}/{proposals.PROPOSALS_FILE}")
     return 0
 
@@ -1070,6 +1075,19 @@ def cmd_apply(args, rep: Reporter) -> int:
     by_id = {p.id: p for p in selected}
     if not args.dry_run:
         apply_engine.log_outcomes(cfg, outcomes)
+        # Writeback (item 4): proposals.json is the single source of truth for "what's
+        # still pending". Mark proposals that landed (applied, or idempotent noop) so a
+        # fresh session, `apply --all`, or `librarian todos` never re-surfaces done work.
+        done = {o.id: o.result for o in outcomes if o.result in (apply_engine.APPLIED, apply_engine.NOOP)}
+        if done:
+            stamp = config.today().isoformat()  # injectable date, never wall-clock (determinism)
+            changed = False
+            for p in all_props:
+                if p.id in done and not p.applied:
+                    p.applied, p.applied_at, p.result = True, stamp, done[p.id]
+                    changed = True
+            if changed:
+                proposals.save(cfg, all_props)
 
     applied_any = any(o.result == apply_engine.APPLIED for o in outcomes)
     marked_done = False

@@ -7,7 +7,10 @@ as checkboxes. One schema, four consumers, two producers.
 
 `schema_version` is **1** and this file is a COMPATIBILITY SURFACE: once consuming
 repos carry `_index/proposals.json`, a bump is breaking. Change it as deliberately
-as STALENESS.md line 3.
+as STALENESS.md line 3. NOTE (apply-state fields `applied`/`applied_at`/`result`):
+these are additive and emitted only on applied proposals, so roll-FORWARD is safe;
+roll-BACK is not — a librarian predating them will reject a proposals.json that
+carries them (the strict unknown-key loader). Fine at ~1 consumer, but stated, not silent.
 
 Pure engine: dataclasses + validation + id/hash helpers + load/save. All policy
 enforcement that needs the working tree (staleness, the fix truth-table) lives in
@@ -92,10 +95,17 @@ class Proposal:
     risk: Risk = field(default_factory=Risk)
     rationale: str = ""
     approved: bool = False
+    # Apply-time state (written back by `librarian apply` so proposals.json is the single
+    # source of truth for "what's still pending"). Emitted ONLY when applied, so unapplied
+    # proposals serialize identically to before (minimal golden churn). None of these feed
+    # compute_id, so writeback never changes an id.
+    applied: bool = False
+    applied_at: str | None = None  # a date from the injectable clock (config.today()), never wall-clock
+    result: str | None = None
     id: str = ""  # filled/verified on validate
 
     def to_dict(self) -> dict:
-        return {
+        d: dict = {
             "schema_version": SCHEMA_VERSION,
             "id": self.id,
             "type": self.type,
@@ -106,6 +116,13 @@ class Proposal:
             "provenance": self.provenance.to_dict(),
             "risk": self.risk.to_dict(),
         }
+        if self.applied:
+            d["applied"] = True
+            if self.applied_at is not None:
+                d["applied_at"] = self.applied_at
+            if self.result is not None:
+                d["result"] = self.result
+        return d
 
 
 # --- id / hashing --------------------------------------------------------------
@@ -216,6 +233,9 @@ def from_dict(d: dict, *, where: str = "proposal") -> Proposal:
 
     rationale = d.pop("rationale", "")
     approved = bool(d.pop("approved", False))
+    applied = bool(d.pop("applied", False))
+    applied_at = d.pop("applied_at", None)
+    result = d.pop("result", None)
     given_id = d.pop("id", None)
 
     _require(not d, f"{where}: unknown key(s): {', '.join(sorted(d))}")
@@ -228,6 +248,9 @@ def from_dict(d: dict, *, where: str = "proposal") -> Proposal:
         risk=risk,
         rationale=rationale,
         approved=approved,
+        applied=applied,
+        applied_at=applied_at if isinstance(applied_at, str) else None,
+        result=result if isinstance(result, str) else None,
     )
     canonical = compute_id(p.type, p.targets, p.action)
     if given_id is not None and given_id != canonical:

@@ -190,13 +190,45 @@ def _apply_archive(cfg: Config, p: proposals.Proposal, dry: bool) -> tuple[str, 
     return _archive_move(cfg, tgt.path, to, p.action.get("set_status", "archived"), dry)
 
 
+def _fold_carry_over(cfg: Config, p: proposals.Proposal, dry: bool) -> tuple[str, str] | None:
+    """Fold a merge's `carry_over` text into the canonical, idempotently. apply OWNS this
+    edit now (no hand-editing first — that was the false-STALE bug). The canonical is guarded
+    HERE via action.canonical_sha256, not by the generic stale gate (which `apply_one`
+    excludes it from for merges), so the fold can mutate it without self-STALE-ing on re-run.
+
+    Returns an (result, detail) tuple only on refusal; None when the fold is done/absent."""
+    a = p.action
+    canonical = a.get("canonical")
+    raw = a.get("carry_over") or []
+    items = [raw] if isinstance(raw, str) else list(raw)
+    carry = "\n\n".join(s for s in (str(x).strip() for x in items) if s)
+    if not carry:
+        return None  # nothing to fold
+    cpath = cfg.path(canonical)
+    if not cpath.exists():
+        return STALE, f"canonical {canonical} missing; re-dream"
+    ctext = _read(cfg, canonical)
+    if carry in ctext:
+        return None  # already folded -> idempotent, leave canonical untouched
+    # not yet folded: guard against an EXTERNAL change to canonical since draft time
+    canonical_sha = a.get("canonical_sha256")
+    if canonical_sha is not None and proposals.file_sha256(cpath) != canonical_sha:
+        return STALE, f"canonical {canonical} changed since draft — re-dream"
+    if not dry:
+        cpath.write_text(ctext.rstrip("\n") + "\n\n" + carry + "\n", encoding="utf-8")
+    return None
+
+
 def _apply_merge(cfg: Config, p: proposals.Proposal, dry: bool) -> tuple[str, str]:
-    # Canonical is assumed already edited on the dream branch (carry_over folded in at
-    # draft time); apply's deterministic step is retiring the redundant doc.
+    # apply's deterministic steps: (1) fold carry_over into the canonical (idempotent),
+    # (2) retire the redundant doc.
     a = p.action
     redundant, canonical = a.get("redundant"), a.get("canonical")
     if not redundant or not canonical:
         return ERROR, "merge proposal missing action.canonical/redundant"
+    refusal = _fold_carry_over(cfg, p, dry)
+    if refusal is not None:
+        return refusal
     if not a.get("then_archive", True):
         src = cfg.path(redundant)
         if not src.exists():
@@ -271,6 +303,12 @@ def stale_targets(cfg: Config, p: proposals.Proposal) -> list[str]:
 def apply_one(cfg: Config, p: proposals.Proposal, *, dry_run: bool = False) -> Outcome:
     paths = [t.path for t in p.targets]
     stale = stale_targets(cfg, p)
+    if p.type == "merge":
+        # The canonical is intentionally mutated by the carry_over fold; its staleness is
+        # guarded inside _apply_merge via action.canonical_sha256 (idempotency-aware), so it
+        # must NOT trip the generic pre-handler stale gate (which would false-STALE on re-run).
+        canonical = p.action.get("canonical")
+        stale = [s for s in stale if s != canonical]
     if stale:
         detail = f"target(s) changed since draft: {', '.join(stale)} — re-dream"
         return Outcome(p.id, p.type, STALE, detail, paths)
@@ -287,12 +325,14 @@ def apply_one(cfg: Config, p: proposals.Proposal, *, dry_run: bool = False) -> O
 def select(
     all_proposals: list[proposals.Proposal], *, only: set[str] | None, all_approved: bool
 ) -> list[proposals.Proposal]:
-    """--only <id>… selects those ids (regardless of approval); --all selects every
-    approved proposal. Explicit --only is the terminal path the agent calls."""
+    """--only <id>… selects those ids (regardless of approval/applied — explicit re-apply
+    is allowed); --all selects every approved proposal that is NOT already applied (so a
+    second `apply --all` is a no-op, not a re-run of done work). --only is the terminal path
+    the agent calls."""
     if only:
         return [p for p in all_proposals if p.id in only]
     if all_approved:
-        return [p for p in all_proposals if p.approved]
+        return [p for p in all_proposals if p.approved and not p.applied]
     return []
 
 
