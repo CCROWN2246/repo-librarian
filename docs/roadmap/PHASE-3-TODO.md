@@ -140,8 +140,10 @@ already solved the *solo* review pain; this is the team/scheduling story on top.
 
 ## Housekeeping (not blocked on the above)
 
-- **Regenerate the demo golden for `provenance.json`** — `verify` now emits it; the demo `_index/` +
-  `tests/golden/` don't yet include it. Regenerate deliberately (recipe in `tests/test_golden.py`).
+- **Regenerate the demo golden for `provenance.json` — DONE (2026-07-13).** The demo `_index/` +
+  `tests/golden/` now include a deterministic `provenance.json` + a POSIX-guarded golden compare; the
+  golden render path mirrors `write_all` so the demo's intentional DRIFT surfaces as a failing check in
+  STALENESS (closed the eng-review-9 render_all/write_all divergence). Wall-clock state dotfiles gitignored.
 - **Enrich-loop demo** — add a planted gap + a source to the demo repo so the README can show the
   active-analyst loop, not just verify catching drift.
 - **PyPI trusted publishing — DONE.** Configured at pypi.org, repo var `PYPI_PUBLISH=true`, `repo-librarian`
