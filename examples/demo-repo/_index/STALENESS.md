@@ -7,6 +7,7 @@ _Resolve a conflict by: (1) FIXING the doc (correct/remove the line + drop the m
 ## Correctness (most severe first — details in the sections below)
 
 - **1** open conflict(s)
+- **1** failing check(s) — verify DRIFT/ERROR
 - **1** coverage gap(s) — checkable fact, no check
 
 ## Inbox — raw docs awaiting intake (triage -> tier -> conflict-check -> frontmatter -> file)
@@ -35,3 +36,11 @@ _These docs assert a number/count/ID but have no `[[verify.checks]]` entry guard
 | id | doc | claim |
 |----|-----|-------|
 | demo-readme | `README.md` | has 20 |
+
+## Failing checks (verify DRIFT/ERROR — a registered check no longer matches its source)
+
+_Run `librarian verify` to refresh, then fix the doc against the FRESH live value (never the cached one) — or `librarian verify --accept <id>` if the new value is the correct one._
+
+| check | status | expect | live | doc |
+|-------|--------|--------|------|-----|
+| min_dock_count_is_20 | DRIFT | 20 | 15 | `docs/schema.md` |

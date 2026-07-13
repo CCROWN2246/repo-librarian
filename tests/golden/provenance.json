@@ -1,0 +1,49 @@
+{
+  "records": [
+    {
+      "check_id": "active_station_count",
+      "command": "python3 db/query.py 'SELECT count(*) FROM stations WHERE active = 1'",
+      "doc": "docs/schema.md",
+      "expect": "17",
+      "kind": "assert",
+      "live": "17",
+      "source": "demo-db",
+      "status": "PASS",
+      "verified_at": "2026-07-01"
+    },
+    {
+      "check_id": "min_dock_count_is_20",
+      "command": "python3 db/query.py 'SELECT min(dock_count) FROM stations'",
+      "doc": "docs/schema.md",
+      "expect": "20",
+      "kind": "assert",
+      "live": "15",
+      "source": "demo-db",
+      "status": "DRIFT",
+      "verified_at": "2026-07-01"
+    },
+    {
+      "check_id": "stations_no_region_column",
+      "command": "python3 db/query.py 'SELECT count(*) FROM pragma_table_info('\"'\"'stations'\"'\"') WHERE name='\"'\"'region'\"'\"''",
+      "doc": "docs/schema.md",
+      "expect": "0",
+      "kind": "assert",
+      "live": "0",
+      "source": "demo-db",
+      "status": "PASS",
+      "verified_at": "2026-07-01"
+    },
+    {
+      "baseline": "1210",
+      "check_id": "total_rides",
+      "command": "python3 db/query.py 'SELECT count(*) FROM rides'",
+      "doc": "docs/overview.md",
+      "kind": "track",
+      "live": "1284",
+      "source": "demo-db",
+      "status": "CHANGED",
+      "verified_at": "2026-07-01"
+    }
+  ],
+  "schema_version": 1
+}

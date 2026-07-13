@@ -1,0 +1,6 @@
+# Runtime state (wall-clock / session) — not deterministic artifacts, never committed.
+# The deterministic _index/ outputs (CATALOG.md, STALENESS.md, catalog.json,
+# baselines.json, provenance.json) ARE committed so GitHub browsers can read the catalog.
+_index/.last_verified
+_index/.last_nudge
+_index/.last_dream
