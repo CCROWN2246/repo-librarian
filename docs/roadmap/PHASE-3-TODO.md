@@ -45,6 +45,51 @@ current dream/enrich branch. NOT urllib+token, NOT an auto-on-push GitHub Action
 - Reversible/no-op if not in a git repo or `gh` missing. Default off / never automatic.
 - Tests: `--dry-run` renders the checklist deterministically; skips cleanly without `gh`.
 
+## V — "Wire verify to your data" onboarding (CSVs / a read-only DB / a folder of files)
+
+**Status of the engine (verified 2026-07-13):** the mechanism is CAPABLE today. A `[verify.sources]`
+entry is any shell command; extractors cover `scalar` (a query/cell value), `lines` (row count),
+`json:<path>` (an API/`jq` field), `regex:`, and `column_present:`/`column_absent:` (schema drift). Read-only
+DBs work through the user's `psql`/`sqlite3`/`bq` CLI; CSVs through `awk`/`head`/`wc`. The `skip_unless`
+probe auto-skips a check when the source isn't reachable. **What's missing is the UX to reach that** — so a
+user handed "a folder of CSVs" or "a read-only DB" cannot get to the pitched experience without hand-writing
+TOML, knowing the `extract` spec syntax (currently only in `extractors.py`'s docstring), and seeding each
+`expect` by hand. `suggest` drafts *catalog* entries, NOT verify checks. Close this before beta.
+
+**V1 — "Wire verify to your data" guide + copy-paste recipes.** A user-facing doc (and README section)
+that explains sources/checks, `assert` vs `track`, and the `extract` spec in plain language, with drop-in
+recipes for: a CSV row count / distinct count / column-presence; a SQLite scalar; a Postgres query
+(read-only role); an HTTP API `json:` field. Promote the `extract` spec out of the code docstring into
+real docs. This alone unblocks a motivated user.
+
+**V2 — `librarian add-check` (guided single wiring).** A command that turns raw-TOML authoring into a
+ritual: given a command (or a CSV path + an intent like `rows`/`distinct <col>`/`columns`), run it ONCE,
+show the live value, and write the `[verify.sources]` + `[[verify.checks]]`. For `assert`, seed `expect`
+from the live value behind a "confirm this is the correct value" gate; for `track`, auto-baseline. Writes
+to the `generated-checks.json` sidecar (already the machine surface) or prints TOML for a hand-owned source.
+Pairs with the existing `verify --accept`.
+
+**V3 — `librarian connect <dir>` / extend `suggest` to draft verify checks (the bulk story).** Scan a
+folder of data files (CSV/TSV/parquet-via-CLI) or a list of SQL files and DRAFT one check per file as
+`add_check` proposals (row-count via `lines`, or column-presence for schema) the user accepts through the
+normal propose→apply spine. This is what makes "connect a folder of CSVs and it just works" a single guided
+step instead of N hand-edits. Reuses the proposal objects + `librarian apply` already built.
+
+**V4 — Extractor coverage + a data-side coverage nudge.** Add the high-value conveniences that today need
+shell gymnastics (`distinct:<col>`, a simple `count_where`), or document the shell recipes explicitly.
+Extend the correctness-coverage scan (currently doc-side) so `doctor`/STALENESS also nudges: "you have data
+files (`data/*.csv`, a `*.db`) that no verify check guards" — pulling the user toward wiring, the same way
+the doc coverage-gap surfaces an unchecked claim.
+
+**V5 — Read-only DB safety pattern.** Document (and where possible guard) that the source command should
+use a **read-only role / SELECT-only** — the tool shells out and cannot enforce it, so make the recipe
+default to a read-only connection string and lean on `skip_unless` as the "is the DB reachable" probe. State
+plainly that verify never writes to the source; it only reads.
+
+**Why this is pre-beta, not Phase 3:** the pitch to testers is "point a one-line command at your source of
+truth and it flags drift." That's honest about the *engine* but not the *onboarding*. V1 (docs) is cheap and
+should land before the beta post; V2/V3 are the difference between "capable" and "delightful."
+
 ## D4 — Overnight / async dream automation (+ the "dream" rename decision)
 
 **What:** decide (and then build) how the dream cycle runs *unattended*, and resolve the naming that
