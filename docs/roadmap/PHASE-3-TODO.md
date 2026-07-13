@@ -56,6 +56,19 @@ user handed "a folder of CSVs" or "a read-only DB" cannot get to the pitched exp
 TOML, knowing the `extract` spec syntax (currently only in `extractors.py`'s docstring), and seeding each
 `expect` by hand. `suggest` drafts *catalog* entries, NOT verify checks. Close this before beta.
 
+**Checklist (priority order):**
+- [ ] **V1 — the guide + recipes** ⭐ **PRE-BETA (do before the beta post):** plain-language explainer +
+  drop-in recipes for CSV row/distinct/column-presence, SQLite scalar, a read-only Postgres query, an API
+  `json:` field. Promotes the `extract` syntax out of the code docstring into real docs.
+- [ ] **V2 — `librarian add-check`:** guided single wiring — run the command once, seed `expect` from the
+  live value behind a confirm gate.
+- [ ] **V3 — `librarian connect <dir>`:** the "point it at a folder of CSVs and it drafts a check per file"
+  bulk story, riding the propose→apply spine you already built.
+- [ ] **V4 — extractor conveniences (`distinct`) + a data-side coverage nudge** ("you have data files no
+  check guards").
+- [ ] **V5 — read-only DB safety pattern** (SELECT-only role, `skip_unless` as the reachability probe;
+  verify only ever reads).
+
 **V1 — "Wire verify to your data" guide + copy-paste recipes.** A user-facing doc (and README section)
 that explains sources/checks, `assert` vs `track`, and the `extract` spec in plain language, with drop-in
 recipes for: a CSV row count / distinct count / column-presence; a SQLite scalar; a Postgres query

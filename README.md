@@ -27,6 +27,13 @@ said **181**. That number had been asserted in three deliverables before anyone 
 `librarian verify` turns each such fact into a check against its live source — the
 drift became a red line in CI instead of a wrong number in an exec deck.
 
+## Not a search brain or an auto-wiki
+
+gbrain and LLM wikis make your docs *findable*; repo-librarian makes them *trustworthy* —
+it fact-checks each documented claim against its live source and flags the moment one
+drifts from reality, deterministically, no embeddings. It's a different job, not a
+competitor: point a RAG index *at* a corpus the librarian keeps honest.
+
 ## How it works — three moves
 
 1. **Frontmatter on every doc** — `domain`, `read_when` (task phrases: the routing
