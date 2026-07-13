@@ -25,7 +25,9 @@ docs say, however stale.
 The project this tool was extracted from had docs saying **164 facilities**. Production
 said **181**. That number had been asserted in three deliverables before anyone noticed.
 `librarian verify` turns each such fact into a check against its live source — the
-drift became a red line in CI instead of a wrong number in an exec deck.
+drift became a red line in CI instead of a wrong number in an exec deck. Wiring it to
+your own CSVs, a read-only database, or an API is a one-line command per fact —
+see **[docs/verify-recipes.md](docs/verify-recipes.md)** for copy-paste recipes.
 
 ## Not a search brain or an auto-wiki
 

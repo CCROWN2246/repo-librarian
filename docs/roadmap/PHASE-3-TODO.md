@@ -57,9 +57,10 @@ TOML, knowing the `extract` spec syntax (currently only in `extractors.py`'s doc
 `expect` by hand. `suggest` drafts *catalog* entries, NOT verify checks. Close this before beta.
 
 **Checklist (priority order):**
-- [ ] **V1 — the guide + recipes** ⭐ **PRE-BETA (do before the beta post):** plain-language explainer +
-  drop-in recipes for CSV row/distinct/column-presence, SQLite scalar, a read-only Postgres query, an API
-  `json:` field. Promotes the `extract` syntax out of the code docstring into real docs.
+- [x] **V1 — the guide + recipes** ✅ **DONE (2026-07-13):** shipped as `docs/verify-recipes.md` (linked
+  from the README) — mental model, the `extract` spec table (promoted out of the code docstring), and
+  drop-in recipes for a folder of CSVs (row/distinct/column-presence), read-only SQLite, read-only Postgres
+  (with the SKIP-until-connected DSN pattern), an HTTP API `json:` field, and a one-off `cmd` check.
 - [ ] **V2 — `librarian add-check`:** guided single wiring — run the command once, seed `expect` from the
   live value behind a confirm gate.
 - [ ] **V3 — `librarian connect <dir>`:** the "point it at a folder of CSVs and it drafts a check per file"
@@ -143,4 +144,8 @@ already solved the *solo* review pain; this is the team/scheduling story on top.
   `tests/golden/` don't yet include it. Regenerate deliberately (recipe in `tests/test_golden.py`).
 - **Enrich-loop demo** — add a planted gap + a source to the demo repo so the README can show the
   active-analyst loop, not just verify catching drift.
-- **PyPI trusted publishing** — set it up at pypi.org, then flip repo var `PYPI_PUBLISH=true`.
+- **PyPI trusted publishing — DONE.** Configured at pypi.org, repo var `PYPI_PUBLISH=true`, `repo-librarian`
+  v0.3.0 is live (`pipx install repo-librarian` works). **Real pre-beta step:** cut a release of the
+  round-2-hardened code — it's all unreleased on `librarian/phase-0` (PyPI still serves v0.3.0). After
+  round 3: bump version + CHANGELOG, merge phase-0 → main, tag `vX.Y.Z` → `release.yml` auto-publishes the
+  hardened build. Do NOT run the beta on v0.3.0 (it predates every round-2 fix).
