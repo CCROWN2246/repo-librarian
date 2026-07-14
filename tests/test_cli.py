@@ -169,6 +169,27 @@ class CliTests(CliCase):
         code, _, _ = self.run_sub("search", "zzz-no-match-zzz")
         self.assertEqual(code, 1)
 
+    def test_search_tokenizes_folds_and_guards(self):
+        # P0 (round-3 A1): a quoted multi-word query arrives as ONE arg with
+        # spaces; it must split on whitespace, not collapse to one literal
+        # substring that matches nothing.
+        self.write("docs/a.md", make_doc(id="alpha", read_when="write athena query"))
+        self.write("docs/b.md", make_doc(id="beta", read_when="deploy production"))
+        self.write("docs/c.md", make_doc(id="gamma", read_when="per-shipment tracking"))
+        self.run_sub("index")
+        # quoted phrase as a single arg -> tokenized -> ranked hit
+        code, out, _ = self.run_sub("search", "write query")
+        self.assertEqual(code, 0)
+        self.assertIn("alpha", out)
+        # trailing-s fold: a plural query matches a singular term in read_when
+        code, out, _ = self.run_sub("search", "shipments")
+        self.assertEqual(code, 0)
+        self.assertIn("gamma", out)
+        # empty-query guard: a pure-stopword query must NOT match every doc via
+        # the `"" in rw` all-match trap. "of" matches none of these docs.
+        code, _, _ = self.run_sub("search", "of")
+        self.assertEqual(code, 1)
+
     def test_archive_moves_flips_and_reindexes(self):
         self.write("docs/old.md", make_doc(id="old", status="draft", last_verified="2026-07-01"))
         self.run_sub("index")

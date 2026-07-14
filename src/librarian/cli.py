@@ -578,6 +578,62 @@ def cmd_status(args, rep: Reporter) -> int:
     return 0
 
 
+# Search tokenization (round-3 A1). Split each arg on whitespace so a quoted
+# multi-word query ("pricing salary") does not collapse to one literal substring
+# that matches nothing; fold a trailing 's' (shipments->shipment). These RAW
+# tokens drive the whole-phrase bonus (so an exact read_when phrase like
+# "write a query" still matches). Stopwords are dropped only from the per-token
+# scoring (see cmd_search) — never from the phrase, and never such that the query
+# empties (an empty phrase "" substring-matches every doc: a spurious all-match
+# that also poisons the ingest conflict-check).
+_SEARCH_STOPWORDS = frozenset(
+    {
+        "a",
+        "an",
+        "and",
+        "are",
+        "as",
+        "at",
+        "be",
+        "but",
+        "by",
+        "do",
+        "does",
+        "for",
+        "from",
+        "how",
+        "in",
+        "is",
+        "it",
+        "of",
+        "on",
+        "or",
+        "our",
+        "the",
+        "to",
+        "we",
+        "what",
+        "when",
+        "where",
+        "which",
+        "who",
+        "why",
+        "with",
+        "you",
+    }
+)
+
+
+def _search_tokens(terms: list[str]) -> list[str]:
+    folded = []
+    for term in terms:
+        for word in term.lower().split():
+            if len(word) > 3 and word.endswith("s") and not word.endswith("ss"):
+                word = word[:-1]
+            folded.append(word)
+    return folded
+
+
 def cmd_search(args, rep: Reporter) -> int:
     cfg = _resolve_config(args)
     data = _load_catalog_json(cfg)
@@ -585,7 +641,11 @@ def cmd_search(args, rep: Reporter) -> int:
         res = _build_catalog(cfg)
         render.write_all(cfg, res)
         data = json.loads(render.catalog_json(res))
-    query = [t.lower() for t in args.terms]
+    tokens = _search_tokens(args.terms)
+    phrase = " ".join(tokens)
+    # Per-token scoring drops stopwords to cut noise; fall back to the raw tokens
+    # if that would empty the query (guard against the all-match trap).
+    content = [t for t in tokens if t not in _SEARCH_STOPWORDS] or tokens
     scored = []
     for e in data["entries"]:
         read_when = [str(x).lower() for x in e.get("read_when", [])]
@@ -594,10 +654,9 @@ def cmd_search(args, rep: Reporter) -> int:
         hay_id = str(e.get("id", "")).lower()
         hay_domain = str(e.get("domain", "")).lower()
         score = 0.0
-        phrase = " ".join(query)
-        if any(phrase in rw for rw in read_when):
+        if phrase and any(phrase in rw for rw in read_when):
             score += 10
-        for t in query:
+        for t in content:
             score += 3 * sum(1 for rw in read_when if t in rw)
             score += 2 * sum(1 for tg in tags if t in tg)
             if t in hay_title:
