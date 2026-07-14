@@ -28,6 +28,16 @@ class GapDetectionTests(RepoCase):
         refs = {(g.kind, g.ref) for g in gaps}
         self.assertIn(("uncovered", "etl/pipeline.py"), refs)
 
+    def test_uncovered_gap_infers_domain_from_path(self):
+        # 5.1: an uncovered file's gap carries a suggested domain from its first
+        # path segment (was always "" before), so drafts are consistent.
+        self.write("docs/a.md", make_doc(id="a", read_when="a task"))
+        self.write("data/warehouse/pipeline.py", "print('x')\n")
+        cfg = self.cfg()
+        gaps = enrich.detect_gaps(cfg, _catalog(cfg), proposals.load(cfg))
+        g = next(g for g in gaps if g.ref == "data/warehouse/pipeline.py")
+        self.assertEqual(g.domain, "data")
+
     def test_confirmed_absence_is_a_gap(self):
         self.write("docs/a.md", make_doc(id="a", read_when="a task"))
         cfg = self.cfg()

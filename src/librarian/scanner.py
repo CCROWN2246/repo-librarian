@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import fnmatch
 import os
 
 from .config import Config
@@ -21,7 +22,16 @@ def walk_files(cfg: Config) -> list[str]:
 
 
 def md_files(cfg: Config, all_files: list[str]) -> list[str]:
-    return [f for f in all_files if f.endswith(".md") and os.path.basename(f) not in set(cfg.skip_files)]
+    # 7.1: skip_files entries are basename GLOBS (fnmatch), so "FEEDBACK*.md" covers
+    # every round without hand-editing the list. fnmatchcase (not fnmatch) keeps the
+    # match case-sensitive on every OS — Windows case-folding would be a determinism
+    # hazard. A wildcard-free pattern matches exactly as the old basename set did.
+    patterns = cfg.skip_files
+    return [
+        f
+        for f in all_files
+        if f.endswith(".md") and not any(fnmatch.fnmatchcase(os.path.basename(f), pat) for pat in patterns)
+    ]
 
 
 def inbox_pending(cfg: Config) -> list[str]:

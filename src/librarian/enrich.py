@@ -33,12 +33,31 @@ class Gap:
         return {"kind": self.kind, "ref": self.ref, "detail": self.detail, "domain": self.domain}
 
 
+def _suggest_domain(cfg: Config, path: str) -> str:
+    """5.1: suggest a domain for an uncovered file from its first path segment
+    (data/warehouse/x.csv -> 'data') so drafts are consistent. Only a HINT — the
+    drafting agent may override. When a closed domain taxonomy is configured, do
+    not suggest a segment that isn't in it (avoid inventing a bogus domain)."""
+    parts = path.split("/")
+    seg = parts[0] if len(parts) > 1 else ""
+    if cfg.domains and seg not in cfg.domains:
+        return ""
+    return seg
+
+
 def detect_gaps(cfg: Config, res: CatalogResult, proposals_list: list) -> list[Gap]:
     """Deterministic enrichment worklist. `proposals_list` is the loaded proposals.json
     (list of Proposal); confirmed-gap absence claims come from it."""
     gaps: list[Gap] = []
     for f in sorted(res.uncovered):
-        gaps.append(Gap(kind="uncovered", ref=f, detail=f"no doc or registry entry covers {f}"))
+        gaps.append(
+            Gap(
+                kind="uncovered",
+                ref=f,
+                detail=f"no doc or registry entry covers {f}",
+                domain=_suggest_domain(cfg, f),
+            )
+        )
     for p in proposals_list:
         if p.type == "resolve_absence" and p.action.get("verdict") == "confirmed_gap":
             t = p.targets[0]
