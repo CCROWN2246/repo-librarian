@@ -48,14 +48,21 @@ JSON
   - Whole doc obsolete? Use an `archive` proposal (shape in D).
 
 **B. Merge candidates** (`worklist.merge_candidates`) — same-domain pairs that *look* similar. Read
-both; if genuinely redundant, note the unique content to carry over in `carry_over` and emit the
+both; if genuinely redundant, put the EXACT content to carry over in `carry_over` and emit the
 proposal. **Do NOT edit the canonical doc yet** — the fold happens at apply time (Step 4), on the user's
-branch, only if they approve:
+branch, only if they approve. `carry_over` is a list of structured ops, each `{"target": …, "content": …}`:
+- `"target":"read_when"` or `"tags"` → `"content"` is a list of phrases, UNIONED into the canonical's
+  frontmatter (deduped). This is the common case: carry the redundant doc's routing phrases.
+- `"target":"body"` → `"content"` is the LITERAL markdown to append to the canonical body. Put real
+  content here, never a description like "Section X — unique" (that would be welded into the doc verbatim).
+(A bare string or `list[str]` is still accepted as legacy body text.)
 ```
 librarian propose <<'JSON'
 {"type":"merge","targets":[{"path":"docs/a.md"},{"path":"docs/b.md"}],
- "action":{"canonical":"docs/a.md","redundant":"docs/b.md","carry_over":["Section X — unique"],"then_archive":true},
- "rationale":"near-duplicate; carry b's unique section into a"}
+ "action":{"canonical":"docs/a.md","redundant":"docs/b.md",
+   "carry_over":[{"target":"read_when","content":["deploy rollback","incident runbook"]}],
+   "then_archive":true},
+ "rationale":"near-duplicate; carry b's routing phrases into a"}
 JSON
 ```
 If it's a false positive from shared vocabulary, say so in one line and emit nothing.

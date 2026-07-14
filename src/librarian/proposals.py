@@ -282,6 +282,33 @@ def _validate_type_specifics(p: Proposal, where: str) -> None:
             isinstance(chk, dict) and bool(chk.get("id") or a.get("check_id")),
             f"{where}: add_check requires action.check with an id",
         )
+    elif p.type == "merge":
+        # carry_over may be absent, a bare str, a list[str] (LEGACY body text), or a
+        # list of structured ops {target: read_when|tags|body, content: str|list[str]}.
+        # Validate the structured shape so a malformed fold fails LOUD at propose time,
+        # not silently at apply (or by corrupting the canonical doc).
+        raw = a.get("carry_over")
+        if raw is not None and not isinstance(raw, str):
+            _require(isinstance(raw, list), f"{where}: merge carry_over must be a string or a list")
+            for i, item in enumerate(raw):
+                if isinstance(item, str):
+                    continue  # legacy list[str]: appended to the body
+                _require(
+                    isinstance(item, dict),
+                    f"{where}: carry_over[{i}] must be a string or an object",
+                )
+                _require(
+                    item.get("target") in ("read_when", "tags", "body"),
+                    f"{where}: carry_over[{i}].target must be read_when, tags, or body",
+                )
+                content = item.get("content")
+                ok = (isinstance(content, str) and content.strip()) or (
+                    isinstance(content, list) and bool(content) and all(isinstance(x, str) for x in content)
+                )
+                _require(
+                    bool(ok),
+                    f"{where}: carry_over[{i}].content must be non-empty text or a list of strings",
+                )
 
 
 def make(

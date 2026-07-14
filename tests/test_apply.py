@@ -9,7 +9,7 @@ import unittest
 
 from helpers import RepoCase, make_doc
 from librarian import apply as ap
-from librarian import proposals
+from librarian import frontmatter, proposals
 
 
 class ApplyCase(RepoCase):
@@ -206,6 +206,70 @@ class MergeTests(ApplyCase):
         self.assertEqual(oc.result, ap.STALE)
         self.assertIn("canonical", oc.detail)
         self.assertTrue((self.root / "docs/b.md").exists())  # nothing moved
+
+    def test_merge_unions_read_when_frontmatter(self):
+        # 3.1: a structured read_when op UNIONS into the canonical's frontmatter (not
+        # replace), dedups, and never appends prose to the body.
+        self.write("docs/a.md", make_doc(id="a", read_when="existing phrase"))
+        self.write("docs/b.md", make_doc(id="b"))
+        p = proposals.make(
+            "merge",
+            [self.target("docs/a.md"), self.target("docs/b.md")],
+            {
+                "canonical": "docs/a.md",
+                "redundant": "docs/b.md",
+                "carry_over": [{"target": "read_when", "content": ["new phrase", "existing phrase"]}],
+                "then_archive": True,
+            },
+        )
+        self.assertEqual(self.apply(p).result, ap.APPLIED)
+        meta = frontmatter.parse(self.read("docs/a.md")).meta
+        self.assertEqual(meta["read_when"], ["existing phrase", "new phrase"])  # unioned + deduped
+
+    def test_fold_carry_over_is_idempotent(self):
+        # 3.1 per-target idempotency: folding twice unions read_when ONCE (no dup) and
+        # never false-STALEs the canonical (the whole-doc `carry in ctext` bug).
+        self.write("docs/a.md", make_doc(id="a", read_when="existing"))
+        self.write("docs/b.md", make_doc(id="b"))
+        p = proposals.make(
+            "merge",
+            [self.target("docs/a.md"), self.target("docs/b.md")],
+            {
+                "canonical": "docs/a.md",
+                "redundant": "docs/b.md",
+                "carry_over": [{"target": "read_when", "content": ["new"]}],
+            },
+        )
+        cfg = self.cfg()
+        self.assertIsNone(ap._fold_carry_over(cfg, p, dry=False))  # run 1: folds
+        first = self.read("docs/a.md")
+        self.assertIsNone(ap._fold_carry_over(cfg, p, dry=False))  # run 2: NOOP, not STALE
+        self.assertEqual(self.read("docs/a.md"), first)  # byte-identical: no dup, no re-write
+        self.assertEqual(frontmatter.parse(first).meta["read_when"], ["existing", "new"])
+
+    def test_malformed_carry_over_rejected_at_propose(self):
+        # D2 (eng-review): a malformed structured carry_over fails LOUD at propose time,
+        # never silently at apply. Legacy str/list[str] + valid structured pass.
+        self.write("docs/a.md", make_doc(id="a"))
+        self.write("docs/b.md", make_doc(id="b"))
+        base_action = {"canonical": "docs/a.md", "redundant": "docs/b.md"}
+        targets = [{"path": "docs/a.md"}, {"path": "docs/b.md"}]
+
+        def _partial(carry):
+            return {"type": "merge", "targets": targets, "action": {**base_action, "carry_over": carry}}
+
+        with self.assertRaises(proposals.ProposalError):
+            proposals.build_from_partial(self.cfg(), _partial([{"target": "bogus", "content": "x"}]))
+        with self.assertRaises(proposals.ProposalError):
+            proposals.build_from_partial(self.cfg(), _partial([{"target": "body", "content": ""}]))
+        # valid shapes round-trip
+        self.assertEqual(
+            proposals.build_from_partial(
+                self.cfg(), _partial([{"target": "read_when", "content": ["p"]}])
+            ).type,
+            "merge",
+        )
+        self.assertEqual(proposals.build_from_partial(self.cfg(), _partial(["body text"])).type, "merge")
 
 
 class WritebackSelectTests(ApplyCase):

@@ -190,32 +190,95 @@ def _apply_archive(cfg: Config, p: proposals.Proposal, dry: bool) -> tuple[str, 
     return _archive_move(cfg, tgt.path, to, p.action.get("set_status", "archived"), dry)
 
 
-def _fold_carry_over(cfg: Config, p: proposals.Proposal, dry: bool) -> tuple[str, str] | None:
-    """Fold a merge's `carry_over` text into the canonical, idempotently. apply OWNS this
-    edit now (no hand-editing first — that was the false-STALE bug). The canonical is guarded
-    HERE via action.canonical_sha256, not by the generic stale gate (which `apply_one`
-    excludes it from for merges), so the fold can mutate it without self-STALE-ing on re-run.
+def _normalize_carry(raw) -> list[tuple[str, object]]:
+    """Normalize a merge's carry_over into (target, content) ops. Accepts:
+    - a bare str or list[str] (LEGACY): each string appended to the canonical BODY;
+    - a list of dicts (STRUCTURED): {"target": read_when|tags|body, "content": str|list}.
+    read_when/tags UNION into frontmatter; body appends to the body."""
+    if not raw:
+        return []
+    if isinstance(raw, str):
+        return [("body", raw)]
+    ops: list[tuple[str, object]] = []
+    for item in raw:
+        if isinstance(item, dict):
+            ops.append((item.get("target", "body"), item.get("content", "")))
+        else:
+            ops.append(("body", str(item)))
+    return ops
 
-    Returns an (result, detail) tuple only on refusal; None when the fold is done/absent."""
+
+def _carry_done(target: str, content, text: str, meta: dict) -> bool:
+    """Is this op already reflected in the canonical? PER-TARGET, so a read_when phrase
+    that merely appears in the body does NOT falsely count as folded (the whole-doc
+    substring bug)."""
+    if target in ("read_when", "tags"):
+        existing = list(meta.get(target) or [])
+        want = content if isinstance(content, list) else [content]
+        return all(w in existing for w in want)
+    return str(content).strip() in text  # body: already present anywhere -> done
+
+
+def _canonical_base(p: proposals.Proposal, canonical: str) -> str | None:
+    """The canonical's draft-time hash. It rides p.targets (apply_one excludes it from the
+    generic stale gate for merges) — reuse it as the external-change guard, no new field."""
+    for t in p.targets:
+        if t.path == canonical:
+            return t.base_sha256
+    return None
+
+
+def _fold_carry_over(cfg: Config, p: proposals.Proposal, dry: bool) -> tuple[str, str] | None:
+    """Fold a merge's carry_over into the canonical, idempotently and PER TARGET. apply OWNS
+    this edit (no hand-editing first — that was the false-STALE bug).
+
+    Idempotency is per-target: read_when/tags UNION into frontmatter (dedup), body text
+    appends to the body. A re-apply is a NOOP and never false-STALEs. The external-change
+    guard (a HUMAN edited the canonical since draft) runs ONLY when nothing has been folded
+    yet — a partial re-apply legitimately diverged from the draft hash via our own earlier
+    fold, so guarding it would false-refuse.
+
+    Returns (result, detail) only on refusal; None when the fold is done/absent."""
     a = p.action
     canonical = a.get("canonical")
-    raw = a.get("carry_over") or []
-    items = [raw] if isinstance(raw, str) else list(raw)
-    carry = "\n\n".join(s for s in (str(x).strip() for x in items) if s)
-    if not carry:
-        return None  # nothing to fold
+    ops = [(t, c) for (t, c) in _normalize_carry(a.get("carry_over")) if c]
+    if not ops:
+        return None
     cpath = cfg.path(canonical)
     if not cpath.exists():
         return STALE, f"canonical {canonical} missing; re-dream"
-    ctext = _read(cfg, canonical)
-    if carry in ctext:
-        return None  # already folded -> idempotent, leave canonical untouched
-    # not yet folded: guard against an EXTERNAL change to canonical since draft time
-    canonical_sha = a.get("canonical_sha256")
-    if canonical_sha is not None and proposals.file_sha256(cpath) != canonical_sha:
-        return STALE, f"canonical {canonical} changed since draft — re-dream"
-    if not dry:
-        cpath.write_text(ctext.rstrip("\n") + "\n\n" + carry + "\n", encoding="utf-8")
+    text = _read(cfg, canonical)
+    parsed = frontmatter.parse(text)
+    meta = parsed.meta if parsed else {}
+
+    pending = [(t, c) for (t, c) in ops if not _carry_done(t, c, text, meta)]
+    if not pending:
+        return None  # fully folded already -> idempotent, canonical untouched
+    if parsed is None and any(t in ("read_when", "tags") for (t, _c) in pending):
+        return STALE, f"canonical {canonical} has no frontmatter block; re-dream"
+
+    # External-change guard: only when NOTHING is folded yet (pristine). Idempotency runs
+    # first (above) so a clean re-run returns before ever reaching this (outside voice #3).
+    if len(pending) == len(ops):
+        base = a.get("canonical_sha256") or _canonical_base(p, canonical)
+        if base and proposals.file_sha256(cpath) != base:
+            return STALE, f"canonical {canonical} changed since draft — re-dream"
+
+    if dry:
+        return None
+    newtext = text
+    body_appends = []
+    for target, content in pending:
+        if target in ("read_when", "tags"):
+            cur = list((frontmatter.parse(newtext).meta or {}).get(target) or [])
+            want = content if isinstance(content, list) else [content]
+            merged = cur + [w for w in want if w not in cur]
+            newtext = frontmatter.set_field(newtext, target, merged)
+        else:
+            body_appends.append(str(content).strip())
+    if body_appends:
+        newtext = newtext.rstrip("\n") + "\n\n" + "\n\n".join(body_appends) + "\n"
+    cpath.write_text(newtext, encoding="utf-8")
     return None
 
 
