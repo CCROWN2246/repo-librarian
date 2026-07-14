@@ -801,8 +801,15 @@ def cmd_todos(args, rep: Reporter) -> int:
     can say `apply 1 3` and translate to `apply --only <id> <id>`."""
     cfg = _resolve_config(args)
     props = proposals.load(cfg)
-    pending = [p for p in props if not p.applied]
-    applied = [p for p in props if p.applied]
+    # Reconcile a crash-stale writeback: an id the apply-log records as applied counts as
+    # applied even if its proposals.json flag is stale (Finding B — log wins).
+    landed = apply_engine.applied_ids_from_log(cfg)
+
+    def _is_applied(p) -> bool:
+        return p.applied or p.id in landed
+
+    pending = [p for p in props if not _is_applied(p)]
+    applied = [p for p in props if _is_applied(p)]
     if args.json:
         rep.emit_json(
             {
@@ -1092,9 +1099,22 @@ def cmd_propose(args, rep: Reporter) -> int:
         return 2
     partials = data if isinstance(data, list) else [data]
     existing = proposals.load(cfg)
-    existing_ids = {p.id for p in existing}
+    existing_by_id = {p.id: p for p in existing}
+    existing_ids = set(existing_by_id)
+    # Finding B (reactivation): re-proposing an id that already LANDED resets it to unapplied
+    # (upsert replaces it with the fresh, applied=False object), silently re-surfacing done
+    # work in todos/apply. Warn loudly. Applied state comes from the flag OR the apply-log.
+    landed = existing_ids & apply_engine.applied_ids_from_log(cfg)
     built = [proposals.build_from_partial(cfg, pt, approved=args.approved) for pt in partials]
     replaced = [p.id for p in built if p.id in existing_ids]
+    reactivated = [
+        p.id for p in built if p.id in landed or (existing_by_id.get(p.id) and existing_by_id[p.id].applied)
+    ]
+    for pid in reactivated:
+        rep.warn(
+            f"{pid} was already applied — re-proposing resets its flag, but the apply-log still "
+            f"gates it out of `apply --all`/`todos`; run `apply --only {pid}` to force a re-apply"
+        )
     merged = proposals.upsert(existing, built)
     proposals.save(cfg, merged)
     if args.json:
@@ -1102,6 +1122,7 @@ def cmd_propose(args, rep: Reporter) -> int:
             {
                 "added": [p.id for p in built],
                 "replaced": replaced,
+                "reactivated": reactivated,
                 "total": len(merged),
                 "proposals": [p.to_dict() for p in built],
             }
@@ -1170,7 +1191,14 @@ def cmd_apply(args, rep: Reporter) -> int:
     if args.auto:
         selected = [p for p in all_props if resolved_tier(p) != "off"]
     else:
-        selected = apply_engine.select(all_props, only=only, all_approved=args.all_)
+        # Reconcile a crash-stale writeback: an id the apply-log marks applied is treated as
+        # applied on the --all path even if proposals.json still says False (Finding B).
+        selected = apply_engine.select(
+            all_props,
+            only=only,
+            all_approved=args.all_,
+            applied_ids=apply_engine.applied_ids_from_log(cfg),
+        )
         if only:
             for m in sorted(only - {p.id for p in selected}):
                 rep.warn(f"no proposal with id {m}")

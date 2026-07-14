@@ -470,6 +470,99 @@ class ResolveAbsenceTests(ApplyCase):
         self.assertEqual(self.read("d.md"), before)
 
 
+class ReconcileTests(ApplyCase):
+    """Finding B: the apply-log is written BEFORE the proposals.json writeback, so a crash
+    between them leaves an id applied-in-log but flag-stale in proposals.json. Reconcile on
+    read (log wins) so `apply --all` never re-runs it and `todos` never re-surfaces it."""
+
+    def _ack(self, approved=True):
+        self.write("docs/x.md", make_doc())
+        return proposals.make(
+            "ack", [self.target("docs/x.md", line=3)], {"mark": "librarian:disputed"}, approved=approved
+        )
+
+    def _log(self, *outcomes):
+        ap.log_outcomes(self.cfg(), list(outcomes), now=1000)
+
+    def test_applied_ids_from_log_only_landed_results(self):
+        self._log(
+            ap.Outcome("p_applied", "ack", ap.APPLIED, "", []),
+            ap.Outcome("p_noop", "ack", ap.NOOP, "", []),
+            ap.Outcome("p_stale", "ack", ap.STALE, "", []),
+            ap.Outcome("p_refused", "archive", ap.REFUSED, "", []),
+            ap.Outcome("p_error", "ack", ap.ERROR, "", []),
+        )
+        self.assertEqual(ap.applied_ids_from_log(self.cfg()), {"p_applied", "p_noop"})
+
+    def test_applied_ids_from_log_missing_file(self):
+        self.assertEqual(ap.applied_ids_from_log(self.cfg()), set())
+
+    def test_select_excludes_log_applied_despite_stale_flag(self):
+        p = self._ack()
+        self._log(ap.Outcome(p.id, p.type, ap.APPLIED, "acked", ["docs/x.md"]))
+        applied = ap.applied_ids_from_log(self.cfg())
+        self.assertIn(p.id, applied)
+        self.assertFalse(p.applied)  # proposals.json flag is stale (writeback crashed)
+        # --all must NOT re-select it (log wins)
+        self.assertEqual(ap.select([p], only=None, all_approved=True, applied_ids=applied), [])
+        # --only stays an explicit re-apply escape hatch
+        self.assertEqual(
+            [q.id for q in ap.select([p], only={p.id}, all_approved=False, applied_ids=applied)], [p.id]
+        )
+
+    def test_select_without_applied_ids_is_unchanged(self):
+        p = self._ack()
+        self.assertEqual([q.id for q in ap.select([p], only=None, all_approved=True)], [p.id])
+
+    def test_crash_reapply_does_not_reselect_5_3_pair(self):
+        # After a crash, a paired enrich_create + add_check are both log-applied but flag-stale.
+        # apply --all must re-select NEITHER — else the enrich_create REFUSES (dest exists) and
+        # the add_check re-orphans (the 5.3 hole reopened by crash-reapply).
+        newp = "docs/ops/backup.md"
+        ec = proposals.make(
+            "enrich_create",
+            [proposals.Target(path=newp, base_sha256="")],
+            {"new_path": newp, "body": "x"},
+            provenance=proposals.Provenance(evidence="live value"),
+            approved=True,
+        )
+        ac = proposals.make(
+            "add_check",
+            [proposals.Target(path=newp, base_sha256="")],
+            {"check_id": "cov", "check": {"id": "cov", "doc": newp}},
+            approved=True,
+        )
+        self._log(
+            ap.Outcome(ec.id, ec.type, ap.APPLIED, "", [newp]),
+            ap.Outcome(ac.id, ac.type, ap.APPLIED, "", [newp]),
+        )
+        applied = ap.applied_ids_from_log(self.cfg())
+        self.assertEqual(ap.select([ec, ac], only=None, all_approved=True, applied_ids=applied), [])
+
+
+class ArchiveClobberSuffixTests(ApplyCase):
+    def test_refused_detail_suggests_free_suffix(self):
+        # 3.2: an archive dest that already exists refuses (correct) AND suggests a distinct,
+        # unused numbered dest so the user isn't stuck.
+        self.write("docs/old.md", make_doc(status="draft"))
+        self.write("_archive/old.md", "already archived earlier\n")
+        p = proposals.make(
+            "archive", [self.target("docs/old.md")], {"to": "_archive/old.md", "set_status": "archived"}
+        )
+        oc = self.apply(p)
+        self.assertEqual(oc.result, ap.REFUSED)
+        self.assertIn("_archive/old.2.md", oc.detail)  # first free numbered slot
+
+    def test_suffix_skips_taken_numbers(self):
+        self.write("docs/old.md", make_doc(status="draft"))
+        self.write("_archive/old.md", "v1\n")
+        self.write("_archive/old.2.md", "v2\n")
+        p = proposals.make(
+            "archive", [self.target("docs/old.md")], {"to": "_archive/old.md", "set_status": "archived"}
+        )
+        self.assertIn("_archive/old.3.md", self.apply(p).detail)
+
+
 class LogTests(ApplyCase):
     def test_apply_log_written(self):
         self.write("d.md", "value 20\n")

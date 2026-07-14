@@ -433,6 +433,65 @@ class TodosTests(CliCase):
         self.assertNotIn("ack it", out)  # applied is not "pending"
         self.assertIn("1 already applied", out)
 
+    def test_todos_reconciles_log_applied_despite_stale_flag(self):
+        # Finding B: the apply-log records the id applied, but proposals.json's flag is stale
+        # (writeback crashed). todos must treat it as applied (log wins) — not re-surface it.
+        from librarian import apply as ap
+        from librarian import proposals
+
+        self.write("docs/x.md", make_doc())
+        h = proposals.file_sha256(self.root / "docs/x.md")
+        p = proposals.make(
+            "ack", [proposals.Target("docs/x.md", h, 5)], {"mark": "x"}, rationale="ack it", approved=True
+        )
+        proposals.save(self.cfg(), [p])  # applied flag is False on disk
+        ap.log_outcomes(self.cfg(), [ap.Outcome(p.id, p.type, ap.APPLIED, "", ["docs/x.md"])], now=1000)
+        code, out, _ = self.run_sub("todos")
+        self.assertEqual(code, 0)  # nothing pending — reconciled from the log
+        self.assertNotIn("ack it", out)
+        self.assertIn("1 already applied", out)
+
+
+class ProposeReactivationTests(CliCase):
+    """Finding B: re-proposing an already-applied id resets it to unapplied. Warn loudly."""
+
+    PARTIAL = {
+        "type": "fix",
+        "targets": [{"path": "docs/x.md"}],
+        "action": {"replace": {"old": "20", "new": "17"}},
+        "rationale": "fix it",
+    }
+
+    def _partial_file(self):
+        import json as _json
+
+        path = self.root / "p.json"
+        path.write_text(_json.dumps(self.PARTIAL), encoding="utf-8")
+        return str(path)
+
+    def test_reproposing_applied_id_warns(self):
+        from librarian import apply as ap
+
+        self.write("docs/x.md", "value is 20\n")
+        pf = self._partial_file()
+        code, out, _ = self.run_sub("propose", pf, "--json")
+        self.assertEqual(code, 0)
+        pid = json.loads(out)["added"][0]
+        # simulate a landed apply whose writeback crashed (log only)
+        ap.log_outcomes(self.cfg(), [ap.Outcome(pid, "fix", ap.APPLIED, "", ["docs/x.md"])], now=1000)
+        code, out, err = self.run_sub("propose", pf, "--json")
+        self.assertEqual(code, 0)
+        self.assertIn(pid, json.loads(out)["reactivated"])
+        self.assertIn("already applied", err)
+
+    def test_reproposing_unapplied_id_does_not_warn(self):
+        self.write("docs/x.md", "value is 20\n")
+        pf = self._partial_file()
+        self.run_sub("propose", pf, "--json")
+        code, out, err = self.run_sub("propose", pf, "--json")  # re-propose, never applied
+        self.assertEqual(json.loads(out)["reactivated"], [])
+        self.assertNotIn("already applied", err)
+
 
 class IngestSafetyTests(CliCase):
     """W1: fail-loud on the trust tier in a non-interactive (no-TTY) context — the path

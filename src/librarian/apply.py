@@ -155,6 +155,19 @@ def _flip_status(text: str, status: str) -> str:
         return text  # no frontmatter block; move the file anyway
 
 
+def _next_free_dest(cfg: Config, dest_rel: str) -> str:
+    """First unused `{stem}.{n}{suffix}` (n from 2) beside dest_rel — a disambiguating
+    suffix to suggest when the archive dest is taken (3.2). Posix-style rel path so the
+    suggestion is stable across platforms."""
+    base = Path(dest_rel)
+    parent = base.parent.as_posix()
+    prefix = "" if parent in ("", ".") else parent + "/"
+    n = 2
+    while cfg.path(f"{prefix}{base.stem}.{n}{base.suffix}").exists():
+        n += 1
+    return f"{prefix}{base.stem}.{n}{base.suffix}"
+
+
 def _archive_move(cfg: Config, src_rel: str, dest_rel: str, status: str, dry: bool) -> tuple[str, str]:
     src, dest = cfg.path(src_rel), cfg.path(dest_rel)
     if not src.exists():
@@ -162,7 +175,11 @@ def _archive_move(cfg: Config, src_rel: str, dest_rel: str, status: str, dry: bo
             return NOOP, "already archived"
         return STALE, "source missing and dest absent; re-dream"
     if dest.exists():
-        return REFUSED, f"archive dest {dest_rel} already exists (won't clobber)"
+        alt = _next_free_dest(cfg, dest_rel)
+        return REFUSED, (
+            f"archive dest {dest_rel} already exists (won't clobber) — "
+            f"re-dream with a distinct dest, e.g. {alt}"
+        )
     newtext = _flip_status(_read(cfg, src_rel), status)
     if dry:
         return APPLIED, f"would archive {src_rel} -> {dest_rel} (status={status})"
@@ -302,7 +319,8 @@ def _apply_merge(cfg: Config, p: proposals.Proposal, dry: bool) -> tuple[str, st
         if not dry:
             src.write_text(newtext, encoding="utf-8")
         return APPLIED, f"marked {redundant} archived (merged into {canonical})"
-    dest_rel = f"{cfg.archive_dir}/{Path(redundant).name}"
+    # 3.2: a re-dream may pass action.to to disambiguate a taken archive dest.
+    dest_rel = a.get("to") or f"{cfg.archive_dir}/{Path(redundant).name}"
     result, detail = _archive_move(cfg, redundant, dest_rel, "archived", dry)
     if result == APPLIED:
         detail = f"merged {redundant} into {canonical}; {detail}"
@@ -436,17 +454,54 @@ def apply_batch(cfg: Config, props: list[proposals.Proposal], *, dry_run: bool =
     return outcomes
 
 
+def applied_ids_from_log(cfg: Config) -> set[str]:
+    """Ids the apply-log records as landed (result applied or noop). The apply-log is written
+    BEFORE the proposals.json writeback (cmd_apply), so a crash between the two leaves an id
+    applied-in-log but flag-stale in proposals.json. Reconcile-on-read treats the LOG as the
+    surviving truth (log wins): callers that consume `applied` pass this to `select`/`todos`
+    so a crashed writeback never lets `apply --all` re-run landed work (which would REFUSE a
+    re-created doc and re-orphan a 5.3 pair). Missing/unreadable log -> empty set."""
+    path = cfg.path(cfg.index_dir) / APPLY_LOG
+    if not path.is_file():
+        return set()
+    try:
+        content = path.read_text(encoding="utf-8")
+    except OSError:
+        return set()
+    ids: set[str] = set()
+    for line in content.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            rec = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if rec.get("result") in (APPLIED, NOOP) and rec.get("id"):
+            ids.add(rec["id"])
+    return ids
+
+
 def select(
-    all_proposals: list[proposals.Proposal], *, only: set[str] | None, all_approved: bool
+    all_proposals: list[proposals.Proposal],
+    *,
+    only: set[str] | None,
+    all_approved: bool,
+    applied_ids: set[str] | None = None,
 ) -> list[proposals.Proposal]:
     """--only <id>… selects those ids (regardless of approval/applied — explicit re-apply
     is allowed); --all selects every approved proposal that is NOT already applied (so a
     second `apply --all` is a no-op, not a re-run of done work). --only is the terminal path
-    the agent calls."""
+    the agent calls.
+
+    `applied_ids` (from applied_ids_from_log) reconciles a crash-stale proposals.json flag:
+    an id the log marks applied is treated as applied on the --all path even if its flag is
+    False (Finding B). --only intentionally ignores it — explicit re-apply stays available."""
+    landed = applied_ids or ()
     if only:
         return [p for p in all_proposals if p.id in only]
     if all_approved:
-        return [p for p in all_proposals if p.approved and not p.applied]
+        return [p for p in all_proposals if p.approved and not (p.applied or p.id in landed)]
     return []
 
 
