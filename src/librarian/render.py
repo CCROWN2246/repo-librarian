@@ -62,13 +62,18 @@ def staleness_md(cfg: Config, res: CatalogResult, failing: list[dict] | None = N
     # Line 3 is the legacy summary line — keep its phrase patterns stable; shell
     # hooks in pre-librarian installs grep it.
     failing = failing or []
+    # 2.1: surface the failing-check count on the compat summary line — but ONLY when > 0,
+    # so a clean repo's line 3 is byte-identical to before (no golden churn, no reorder;
+    # the segment is appended at the END of the ·-list, before the stable "Run" sentence).
+    failing_seg = f" · {len(failing)} failing check(s)" if failing else ""
     lines = [
         f"# STALENESS — {GENERATED}",
         "",
         f"{len(res.inbox_pending)} awaiting intake ({cfg.inbox_dir}) · {len(res.stale)} flagged · "
         f"{len(res.orphans)} orphaned · {len(res.conflicts)} OPEN conflicts "
         f"({len(res.conflicts_ack)} acknowledged) · {len(res.missing_fm)} md need frontmatter · "
-        f"{len(res.uncovered)} code/data unregistered. Run `librarian verify` for facts-vs-live.",
+        f"{len(res.uncovered)} code/data unregistered{failing_seg}. "
+        "Run `librarian verify` for facts-vs-live.",
         "",
         "_Resolve a conflict by: (1) FIXING the doc (correct/remove the line + drop the marker) — the "
         "repo is the source of truth, so this is preferred; (2) ACKNOWLEDGING it (mark the disputed line "

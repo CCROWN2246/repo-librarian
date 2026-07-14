@@ -405,15 +405,22 @@ def _verify_accept(cfg: Config, check_id: str, rep: Reporter) -> int:
         rep.error(f"could not read a live value for {check_id} (status {r.status if r else '?'})")
         return 2
     if verify.accept_expect(cfg, check_id, r.live):
+        # 2.3b: the run we just did is DRIFT (that's WHY we're accepting). After accept the
+        # check passes by construction (expect := live) — synthesize that PASS before
+        # persisting, so provenance clears the failing signal now, not only at the next
+        # verify (else the check stays FAILING in the greeting/STALENESS in the meantime).
+        r.status, r.expect = "PASS", r.live
         verify.update_provenance(cfg, run, config.today())
-        rep.say(f"  accepted: {check_id} expect -> {r.live!r} (generated-checks.json).")
+        rep.say(f"  accepted: {check_id} expect -> {r.live!r} (generated-checks.json); check now PASSES.")
         rep.say("  You've intentionally changed what counts as correct. Commit to record it.")
         return 0
-    # Hand-written TOML check: zero-dep tool has no TOML writer — guide the manual edit.
-    rep.say(f"  {check_id} is defined in .librarian.toml — set its expect manually:")
+    # 2.3: a hand-written .librarian.toml check. The zero-dep tool never writes the user's
+    # TOML (config.py invariant), so NOTHING was changed — say so honestly and exit 1 rather
+    # than returning a false success. The DRIFT is real until the human edits the expect.
+    rep.say(f"  NO CHANGE MADE — {check_id} lives in .librarian.toml, which the tool never edits.")
+    rep.say("  Set its expect yourself and commit (you're changing what counts as correct):")
     rep.say(f'      expect = "{r.live}"')
-    rep.say("  (you're intentionally changing what counts as correct.)")
-    return 0
+    return 1
 
 
 def cmd_verify(args, rep: Reporter) -> int:
@@ -451,10 +458,16 @@ def cmd_verify(args, rep: Reporter) -> int:
             rep.say(f"  {a}")
         c = run.counts()
         skips = f" · {c.get('SKIP', 0)} SKIP (source not connected)" if c.get("SKIP") else ""
+        # 2.2: gloss DRIFT once so the verify vocabulary bridges to the "FAILING" status the
+        # greeting/STALENESS use — same signal, two surfaces.
         rep.say(
-            f"\n{len(run.results)} checks · {c.get('DRIFT', 0)} DRIFT · "
+            f"\n{len(run.results)} checks · {c.get('DRIFT', 0)} DRIFT (= failing check) · "
             f"{c.get('CHANGED', 0)} CHANGED (track) · {c.get('ERROR', 0)} ERROR{skips}"
         )
+        # 2.1: verify does not rewrite STALENESS.md — nudge the operator to refresh it so the
+        # persisted failing count and the catalog agree.
+        if run.failed:
+            rep.say("  a check is failing — run `librarian index` to refresh STALENESS.md.")
     return 1 if run.failed else 0
 
 

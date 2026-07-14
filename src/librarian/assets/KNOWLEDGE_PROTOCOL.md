@@ -120,7 +120,9 @@ does NOT need to be *visible*. When you run a `/librarian-*` ritual:
 ## Commands
 - `librarian index` — regenerate `_index/` (CATALOG.md + STALENESS.md + catalog.json).
 - `librarian verify` — fact-check doc claims against their live sources (DRIFT names the doc to fix);
-  `--accept <id>` signs off a new value as correct for an assert check.
+  `--accept <id>` signs off a new value as correct for a **generated** (`add_check`) assert check.
+  For a check written in `.librarian.toml`, the tool never edits your TOML — it exits 1 and prints the
+  `expect = "..."` line for you to paste yourself (no silent success).
 - `librarian status` — one-screen health summary (also the session-start hook; surfaces failing checks).
 - `librarian search <task phrase>` — rank docs by `read_when`/`tags`/`title`/`domain` match.
 - `librarian backfill <dir> --write` — bulk-stamp skeleton frontmatter onto un-annotated docs.

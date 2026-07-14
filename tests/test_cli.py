@@ -617,5 +617,52 @@ class IngestRoutingAndConflictTests(CliCase):
         self.assertNotIn("possible conflict", out)  # nothing to conflict with
 
 
+_POSIX_SH = os.name != "nt" and os.path.exists("/bin/sh")
+
+
+@unittest.skipUnless(_POSIX_SH, "verify shells out via /bin/sh (POSIX only)")
+class VerifyAcceptTests(CliCase):
+    """WS-D 2.3/2.3b: --accept is a SAFE fallback — it edits only generated checks (and
+    clears the DRIFT immediately), and refuses a false success on a hand-written TOML check."""
+
+    def test_accept_generated_check_clears_drift_immediately(self):
+        # 2.3b: accepting a GENERATED (add_check) assert check must record PASS, not the
+        # pre-accept DRIFT — the failing signal clears now, not only at the next verify.
+        from librarian import proposals, verify
+
+        self.write("docs/a.md", make_doc())
+        proposals.save_generated_checks(
+            self.cfg(),
+            [
+                {
+                    "id": "gen1",
+                    "kind": "assert",
+                    "cmd": "echo 10",
+                    "expect": "9",
+                    "source": "local",
+                    "doc": "docs/a.md",
+                }
+            ],
+        )
+        code, out, _ = self.run_sub("verify", "--accept", "gen1")
+        self.assertEqual(code, 0)
+        self.assertIn("now PASSES", out)
+        self.assertEqual(proposals.load_generated_checks(self.cfg())[0]["expect"], "10")
+        self.assertEqual(verify.failing_checks(self.cfg()), [])  # no stale DRIFT persisted
+
+    def test_accept_toml_check_makes_no_change_and_exits_1(self):
+        # 2.3: a hand-written .librarian.toml check is never edited by the tool -> honest
+        # "NO CHANGE MADE" + exit 1, never a false success.
+        self.write("docs/a.md", make_doc())
+        self.cfg(
+            "[[verify.checks]]\nid = 'toml1'\nkind = 'assert'\ndoc = 'docs/a.md'\n"
+            "cmd = \"echo 10\"\nexpect = '9'\n"
+        )
+        code, out, _ = self.run_sub("verify", "--accept", "toml1")
+        self.assertEqual(code, 1)
+        self.assertIn("NO CHANGE MADE", out)
+        self.assertIn('expect = "10"', out)
+
+
 if __name__ == "__main__":
     unittest.main()
