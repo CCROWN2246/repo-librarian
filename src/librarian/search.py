@@ -20,7 +20,12 @@ empty the query (an empty phrase "" substring-matches every doc).
 
 from __future__ import annotations
 
+import re
+
 from .config import Config
+
+# Word tokens for claim_terms: alphanumeric runs (keeping internal ' and -).
+_WORD_RE = re.compile(r"[a-z0-9][a-z0-9'-]*")
 
 # Above this catalogued-doc count the body fallback is skipped: a full-corpus
 # read is too costly, and the token-budget guard measures the index size, not
@@ -78,6 +83,25 @@ def tokens(terms: list[str]) -> list[str]:
 
 def _content(toks: list[str]) -> list[str]:
     return [t for t in toks if t not in _STOPWORDS] or toks
+
+
+def claim_terms(text: str, *, limit: int = 80) -> list[str]:
+    """Distinctive content tokens from a doc's text — the query for the ingest
+    conflict-check (A3): 'what is this doc about'. Deduped (order-preserving),
+    stopwords + sub-3-char tokens dropped, trailing 's' folded, capped at `limit`
+    to bound the fallback body scan and keep the signal topical, not noisy."""
+    seen: set[str] = set()
+    out: list[str] = []
+    for word in _WORD_RE.findall(text.lower()):
+        if len(word) > 3 and word.endswith("s") and not word.endswith("ss"):
+            word = word[:-1]
+        if len(word) < 3 or word in _STOPWORDS or word in seen:
+            continue
+        seen.add(word)
+        out.append(word)
+        if len(out) >= limit:
+            break
+    return out
 
 
 def rank(entries: list[dict], terms: list[str]) -> list[tuple[float, dict]]:

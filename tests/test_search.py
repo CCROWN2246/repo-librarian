@@ -94,5 +94,25 @@ class RankBodiesTests(RepoCase):
         self.assertEqual(search.rank_bodies(self.cfg(), entries, ["escalation"]), [])
 
 
+class ClaimTermsTests(unittest.TestCase):
+    """A3 term extraction: distinctive, deduped, punctuation-clean, trailing-s folded."""
+
+    def test_distinctive_tokens(self):
+        terms = search.claim_terms("We deploy via GitHub Actions, not Jenkins. Deploy again!")
+        self.assertIn("deploy", terms)
+        self.assertIn("github", terms)
+        self.assertIn("action", terms)  # comma stripped, trailing-s folded
+        self.assertIn("jenkin", terms)  # period stripped, trailing-s folded
+        self.assertEqual(terms.count("deploy"), 1)  # deduped
+        self.assertNotIn("we", terms)  # stopword dropped
+
+    def test_respects_limit(self):
+        text = " ".join(f"token{i}" for i in range(200))
+        self.assertEqual(len(search.claim_terms(text, limit=10)), 10)
+
+    def test_empty_text(self):
+        self.assertEqual(search.claim_terms(""), [])
+
+
 if __name__ == "__main__":
     unittest.main()

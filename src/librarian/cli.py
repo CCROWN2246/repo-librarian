@@ -157,6 +157,14 @@ def build_parser() -> argparse.ArgumentParser:
         "--authority", default=None, help="trust tier from provenance (transcripts/third-party: unverified)"
     )
     sp.add_argument("--dest", default="docs", help="destination DIRECTORY (filename is appended)")
+    sp.add_argument(
+        "--read-when",
+        dest="read_when",
+        action="append",
+        default=None,
+        metavar="PHRASE",
+        help="a routing phrase for when to read this doc (repeatable: --read-when X --read-when Y)",
+    )
     sp.add_argument("--recheck", default="90d")
     sp.add_argument("--yes", action="store_true", help="accept defaults, no prompts")
     sp.add_argument(
@@ -728,6 +736,7 @@ def cmd_ingest(args, rep: Reporter) -> int:
             dest=dest,
             recheck=args.recheck,
             today=config.today(),
+            read_when=args.read_when,
             dry_run=args.dry_run,
         )
     except (FileNotFoundError, FileExistsError, ValueError) as e:
@@ -767,12 +776,48 @@ def cmd_ingest(args, rep: Reporter) -> int:
         rep.say(
             f"  NOTE: default(s) used ({', '.join(defaults_used)}) — no flags given; REVIEW before trusting."
         )
-    # D3 (item 5): conflict-check is an agent reflex with no CLI backstop — make it a
-    # required, unmissable next step for anything below the `verified` tier.
-    if below_verified:
+    # A3 (D3-conflict): the tool itself runs the conflict-check and REPORTS candidates —
+    # no CLI backstop is left to an agent's reflex, and nothing is auto-quarantined. Search
+    # the PRE-ingest catalog (build in-memory if none exists yet) and exclude the just-filed
+    # doc so it never self-matches. Markdown only — a data artifact asserts no prose claim.
+    conflicts = []
+    if args.file.endswith(".md"):
+        cat = _load_catalog_json(cfg)
+        if cat is None:
+            cat = json.loads(render.catalog_json(_build_catalog(cfg)))
+        entries = [e for e in cat.get("entries", []) if e.get("path") != result.moved_to]
+        try:
+            text = cfg.path(result.moved_to).read_text(encoding="utf-8")
+        except OSError:
+            text = ""
+        # The claim is title + read_when + body — NOT the frontmatter field names/tier values
+        # (those pollute the query and make every same-domain doc a weak false candidate).
+        parsed = frontmatter.parse(text)
+        if parsed:
+            meta = parsed.meta
+            head = str(meta.get("title", "")) + " " + " ".join(str(x) for x in (meta.get("read_when") or []))
+            claim = head + "\n" + text[parsed.span[1] :]
+        else:
+            claim = text
+        terms = search.claim_terms(claim)
+        if terms and entries:
+            scored = search.rank(entries, terms)
+            if not scored and len(entries) <= search.BODY_SEARCH_MAX_DOCS:
+                scored = search.rank_bodies(cfg, entries, terms)
+            conflicts = [e for _s, e in scored[:3]]
+    if conflicts:
+        rep.say("  possible conflict(s) — you decide (nothing auto-quarantined):")
+        for e in conflicts:
+            rep.say(f"    - {e.get('id') or e['path']} ({e['path']})")
+        if below_verified:
+            rep.say(
+                "    if this contradicts a verified fact, quarantine it with a librarian:disputed marker."
+            )
+    elif below_verified:
+        # No overlap surfaced, but an unverified claim still needs a human conflict-check.
         rep.say(
             "  NEXT (required): conflict-check this against existing verified facts before trusting it — "
-            "if it contradicts one, quarantine it with a librarian:disputed marker."
+            "no overlapping doc surfaced, but confirm before you rely on it."
         )
     if result.artifact_block:
         rep.say(f"\n  non-markdown artifact — add this entry to {cfg.artifacts_file}:\n")

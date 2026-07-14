@@ -559,5 +559,63 @@ class IngestSafetyTests(CliCase):
         self.assertFalse((self.root / "docs" / "notes.md").is_dir())
 
 
+class IngestRoutingAndConflictTests(CliCase):
+    """WS-A A2/A3: read_when auto-suggest plumbing (D4) + ingest conflict-check (D3)."""
+
+    def test_read_when_flag_lands_in_frontmatter(self):
+        # A2 (D4): repeatable --read-when reaches ingest_file and stamps the doc's routing.
+        self.write("_inbox/guide.md", "# Guide\n\nhow to do X\n")
+        code, _out, _ = self.run_sub(
+            "ingest",
+            "guide.md",
+            "--authority",
+            "curated",
+            "--domain",
+            "eng",
+            "--read-when",
+            "onboarding a new hire",
+            "--read-when",
+            "setting up X",
+        )
+        self.assertEqual(code, 0)
+        meta = frontmatter.parse(self.read("docs/guide.md")).meta
+        self.assertEqual(meta["read_when"], ["onboarding a new hire", "setting up X"])
+
+    def test_conflict_check_surfaces_overlapping_doc(self):
+        # A3 (D3-conflict): ingest runs a conflict-check over the PRE-ingest catalog and
+        # prints an overlapping doc as a candidate — the tool reports, the human decides.
+        self.write(
+            "docs/deployment.md",
+            make_doc(id="deployment", title="Deployment", domain="eng", read_when="deploy"),
+        )
+        self.run_sub("index")
+        self.write("_inbox/new-deploy.md", "# Deploy\n\nWe now deploy via GitHub Actions, not Jenkins.\n")
+        code, out, _ = self.run_sub("ingest", "new-deploy.md", "--authority", "unverified", "--domain", "eng")
+        self.assertEqual(code, 0)
+        self.assertIn("possible conflict", out)
+        self.assertIn("docs/deployment.md", out)
+
+    def test_conflict_check_no_false_positive_on_unrelated(self):
+        # An unrelated existing doc must NOT surface (no shared terms -> no candidate).
+        self.write(
+            "docs/pricing.md",
+            make_doc(id="pricing", title="Pricing", domain="product", read_when="pricing questions"),
+        )
+        self.run_sub("index")
+        self.write("_inbox/backup.md", "# Backup\n\nNightly database snapshots to S3.\n")
+        code, out, _ = self.run_sub("ingest", "backup.md", "--authority", "curated", "--domain", "ops")
+        self.assertEqual(code, 0)
+        self.assertNotIn("possible conflict", out)
+        self.assertNotIn("docs/pricing.md", out)
+
+    def test_conflict_check_on_fresh_repo_does_not_error(self):
+        # First-ingest guard: no catalog.json yet -> build in-memory, exclude self, no crash.
+        self.write("_inbox/first.md", "# First\n\nthe very first note in this repo\n")
+        code, out, _ = self.run_sub("ingest", "first.md", "--authority", "unverified", "--domain", "ops")
+        self.assertEqual(code, 0)
+        self.assertIn("filed:", out)
+        self.assertNotIn("possible conflict", out)  # nothing to conflict with
+
+
 if __name__ == "__main__":
     unittest.main()

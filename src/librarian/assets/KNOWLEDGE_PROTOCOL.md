@@ -126,7 +126,11 @@ does NOT need to be *visible*. When you run a `/librarian-*` ritual:
 - `librarian backfill <dir> --write` — bulk-stamp skeleton frontmatter onto un-annotated docs.
 - `librarian ingest <file> --authority <tier>` — triage an `_inbox/` upload (tier → frontmatter → file it);
   in a no-TTY/agent context it REFUSES without `--authority` (never guesses the trust tier); `--dry-run`
-  previews. After filing anything below `verified`, conflict-check it against existing verified facts.
+  previews. **You are already reading the note to set its authority — so also propose its routing:** pass
+  `--domain <area>` and 1-2 `--read-when "<task phrase>"` flags (repeatable) drawn from what the note is
+  about. A doc filed with an empty `read_when` is invisible to `search` and the CATALOG (dream will flag it).
+  Ingest itself then runs a conflict-check and prints any overlapping docs — you decide; nothing is
+  auto-quarantined. After filing anything below `verified`, resolve those against existing verified facts.
 - `librarian dream` — build the deterministic maintenance worklist (conflicts, merge candidates, routing
   TODOs, absence-claims, failing checks); drives the `/librarian-dream` propose-only cycle.
 - `librarian todos` — the pending (unapplied) proposals as a numbered worklist.
