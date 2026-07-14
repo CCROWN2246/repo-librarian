@@ -5,6 +5,38 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
+### Fixed & hardened — round 3 (retrieval honesty + apply/verify integrity + scaffold self-heal)
+- **Search no longer returns a false "no matches."** A quoted multi-word query
+  (`librarian search "pricing tiers"`) was matched as one literal substring and found nothing; it now
+  tokenizes on whitespace, folds a trailing `s` (`shipments`↔`shipment`), and — only when the fast
+  metadata pass returns zero hits — falls back to re-reading doc **bodies** (two-tier), naming the closest
+  partial match. The body pass is capped for large corpora (skips with a "use grep" note rather than a
+  partial read that could miss a real match).
+- **Ingest is safer and self-checks.** Fixed `_inbox/_inbox/` path-doubling (basename-normalized before
+  the refusal check, so the message and the filed path agree — and a stray path can never delete a repo
+  file); replaced the "no TTY" jargon with a plain-English refusal; corrected the "--dest is a directory"
+  error; `--dry-run` now previews the defaults + conflict-check consequences. New repeatable `--read-when`
+  flag stamps routing phrases at intake, and **ingest itself now runs a conflict-check** and prints
+  overlapping docs (you decide — nothing is auto-quarantined).
+- **Apply/merge integrity.** A merge's `carry_over` is now **structured** (`read_when`/`tags` union into
+  frontmatter, deduped; body text appends to the body) with per-target idempotency (re-apply is a true
+  no-op, never a false-STALE), propose-time validation (malformed → error, not silent corruption), and an
+  external-change guard on the canonical. A paired `enrich_create` + `add_check` **no longer orphans the
+  check** regardless of apply order (intra-batch creation awareness). The apply-log is now reconciled on
+  read, so a crash between the log write and the state writeback never lets `apply --all` re-run done work
+  (or re-orphan a pair); re-proposing an already-applied id warns; an archive-dest clash suggests a free
+  numbered suffix.
+- **Verify tells the truth.** `verify --accept` on a hand-written `.librarian.toml` check now exits 1 with
+  an honest "NO CHANGE MADE" and the `expect = "..."` line to paste (the tool never writes your TOML),
+  instead of a silent false success. Accepting a **generated** check clears its DRIFT immediately (no
+  lingering stale-failing signal). STALENESS.md shows a `· N failing check(s)` count (only when > 0), and
+  the verify summary glosses `DRIFT (= failing check)`.
+- **Scanner / enrich.** `skip_files` now supports globs (`["FEEDBACK*.md"]`, case-sensitive for
+  determinism); enrichment gaps carry a `domain` inferred from the path.
+- **Scaffold self-heal.** `status` and `doctor` now nudge `librarian init --upgrade` when the scaffolded
+  protocol/glue predates the installed tool (reads the recorded `.scaffold.json` version) — retiring a
+  class of stale-template false feedback.
+
 ### Added — Phase 2 (enrichment + trust-ladder + producer wiring)
 - **B5 enrichment + E2 auto-checks — the active-analyst loop.** `librarian enrich` is the deterministic
   gap worklist: it surfaces **uncovered code/data files** and **dream-confirmed absence gaps**
