@@ -664,5 +664,38 @@ class VerifyAcceptTests(CliCase):
         self.assertIn('expect = "10"', out)
 
 
+class ScaffoldStalenessCliTests(CliCase):
+    """WS-F SYS: the upgrade nudge surfaces from BOTH status and doctor."""
+
+    def _stale_manifest(self, version="0.0.1"):
+        idx = self.root / "_index"
+        idx.mkdir(parents=True, exist_ok=True)
+        (idx / ".scaffold.json").write_text(
+            json.dumps({"files": {}, "blocks": [], "librarian_version": version}) + "\n",
+            encoding="utf-8",
+        )
+
+    def test_status_surfaces_scaffold_nudge(self):
+        self.write("docs/a.md", make_doc())
+        self.run_sub("index")
+        self._stale_manifest()
+        _code, out, _ = self.run_sub("status")
+        self.assertIn("init --upgrade", out)
+
+    def test_doctor_surfaces_scaffold_nudge(self):
+        self.write("docs/a.md", make_doc())
+        self._stale_manifest()
+        code, out, _ = self.run_sub("doctor")
+        self.assertEqual(code, 0)  # a warn is not a problem
+        self.assertIn("init --upgrade", out)
+
+    def test_status_no_nudge_when_current(self):
+        # No .scaffold.json at all -> no nudge (a repo that never scaffold-inited).
+        self.write("docs/a.md", make_doc())
+        self.run_sub("index")
+        _code, out, _ = self.run_sub("status")
+        self.assertNotIn("init --upgrade", out)
+
+
 if __name__ == "__main__":
     unittest.main()

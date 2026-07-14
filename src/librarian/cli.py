@@ -563,6 +563,11 @@ def cmd_status(args, rep: Reporter) -> int:
     dream_due, _dream_reason = dream.is_due(cfg, dream_wl)
     if dream_due:
         attention.append(f"{dream_wl.total} maintenance item(s) ready — run /librarian-dream")
+    # SYS: a scaffold written by an older librarian silently persists stale protocol/glue
+    # (the whole stale-scaffold false-feedback class). Surface the upgrade nudge.
+    scaffold_nudge = scaffold.scaffold_staleness(cfg)
+    if scaffold_nudge:
+        attention.append(scaffold_nudge)
 
     if args.hook:
         if attention:

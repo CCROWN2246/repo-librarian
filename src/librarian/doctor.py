@@ -37,9 +37,16 @@ class DoctorReport:
 
 
 def run(cfg: Config) -> DoctorReport:
+    from . import scaffold
+
     rep = DoctorReport()
     rep.ok(f"python {sys.version.split()[0]} · root {cfg.root}")
     rep.ok(".librarian.toml parsed cleanly (unknown keys would have errored)")
+
+    # SYS: nudge when the scaffolded protocol/glue predates the installed tool.
+    stale = scaffold.scaffold_staleness(cfg)
+    if stale:
+        rep.warn(stale)
 
     # Registry
     if cfg.path(cfg.artifacts_file).is_file():

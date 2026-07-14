@@ -60,6 +60,43 @@ def _save_manifest(root: Path, index_dir: str, manifest: dict) -> None:
     (out / MANIFEST).write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
+def _ver_tuple(v: str) -> tuple[int, ...]:
+    """Leading-numeric SemVer parse (0.3.0 -> (0,3,0)); ignores any pre-release suffix."""
+    out = []
+    for part in str(v).split("."):
+        digits = ""
+        for ch in part:
+            if ch.isdigit():
+                digits += ch
+            else:
+                break
+        out.append(int(digits) if digits else 0)
+    return tuple(out)
+
+
+def scaffold_staleness(cfg) -> str | None:
+    """A one-line nudge if `.scaffold.json` records an OLDER librarian than the installed
+    one, else None. This retires the stale-scaffold false-feedback class (SYS): a re-init
+    (`--upgrade`) refreshes the managed protocol/glue in place. Only fires when installed is
+    strictly newer than the recorded version — a downgrade or a matching/absent record is
+    silent (no churn, no false nudge). Never initialized (no recorded version) -> None."""
+    from . import __version__
+
+    recorded = _load_manifest(cfg.root, cfg.index_dir).get("librarian_version")
+    if not recorded or recorded == __version__:
+        return None
+    try:
+        behind = _ver_tuple(recorded) < _ver_tuple(__version__)
+    except (ValueError, AttributeError):
+        behind = True  # unparseable record -> a refresh can only help
+    if not behind:
+        return None
+    return (
+        f"scaffold behind: written by v{recorded}, installed v{__version__} — "
+        "run `librarian init --upgrade` to refresh the protocol + .claude glue"
+    )
+
+
 def _write_managed(
     root: Path,
     rel: str,
