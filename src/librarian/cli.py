@@ -1183,7 +1183,9 @@ def cmd_apply(args, rep: Reporter) -> int:
             else "nothing selected (no approved proposals, or --only matched none)",
         )
 
-    outcomes = [apply_engine.apply_one(cfg, p, dry_run=args.dry_run) for p in selected]
+    # apply_batch runs `selected` in order (id-hash-sorted) and threads intra-batch creation
+    # awareness so a paired enrich_create + add_check lands its check regardless of order (5.3).
+    outcomes = apply_engine.apply_batch(cfg, selected, dry_run=args.dry_run)
     by_id = {p.id: p for p in selected}
     if not args.dry_run:
         apply_engine.log_outcomes(cfg, outcomes)

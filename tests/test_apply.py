@@ -359,6 +359,104 @@ class EnrichCreateTests(ApplyCase):
         self.assertEqual(self.read("docs/ops/backup.md"), "already here\n")
 
 
+class IntraBatchCreationTests(ApplyCase):
+    """5.3: a paired enrich_create + add_check must register the check regardless of the
+    id-hash apply order, WITHOUT weakening the round-2 external-change gate. The check's
+    target is absent at draft (base_sha256 == '') — after enrich_create writes the doc, a
+    naive stale gate would false-STALE the check and orphan it."""
+
+    NEWP = "docs/ops/backup.md"
+
+    def _enrich(self):
+        return proposals.make(
+            "enrich_create",
+            [proposals.Target(path=self.NEWP, base_sha256="")],
+            {
+                "new_path": self.NEWP,
+                "status": "provisional",
+                "frontmatter": {
+                    "id": "ops-backup",
+                    "title": "Backup",
+                    "domain": "ops",
+                    "status": "provisional",
+                },
+                "body": "# Backup\n\nprovisional\n",
+            },
+            provenance=proposals.Provenance(evidence="daily at 02:00 UTC (from cron)"),
+        )
+
+    def _check(self):
+        chk = {
+            "id": "backup-cov",
+            "source": "local",
+            "kind": "track",
+            "cmd": "echo 1",
+            "extract": "scalar",
+            "doc": self.NEWP,
+        }
+        return proposals.make(
+            "add_check",
+            [proposals.Target(path=self.NEWP, base_sha256="")],
+            {"check_id": "backup-cov", "source": "local", "check": chk},
+        )
+
+    def _assert_pair_registers(self, batch):
+        outcomes = ap.apply_batch(self.cfg(), batch)
+        by_type = {o.type: o for o in outcomes}
+        self.assertEqual(by_type["enrich_create"].result, ap.APPLIED)
+        self.assertEqual(by_type["add_check"].result, ap.APPLIED, by_type["add_check"].detail)
+        self.assertTrue((self.root / self.NEWP).exists())
+        ids = {c.get("id") for c in proposals.load_generated_checks(self.cfg())}
+        self.assertIn("backup-cov", ids)
+
+    def test_registers_with_enrich_first(self):
+        # The dangerous id-order: enrich_create runs first, creating the doc, so the
+        # add_check's absent-at-draft guard ('') now mismatches the real on-disk hash.
+        # Intra-batch awareness must recognize we created it and register the check.
+        self._assert_pair_registers([self._enrich(), self._check()])
+
+    def test_registers_with_check_first(self):
+        # The already-safe order (add_check runs while the doc is still absent). Proves the
+        # fix does not regress it — both orders must land the check.
+        self._assert_pair_registers([self._check(), self._enrich()])
+
+    def test_existed_at_draft_still_refuses_external_change(self):
+        # An add_check whose target EXISTED at draft (real base_sha256) that then changed
+        # externally must STILL stale — intra-batch awareness must not weaken the gate.
+        self.write("docs/x.md", make_doc())
+        chk = {
+            "id": "c",
+            "source": "local",
+            "kind": "track",
+            "cmd": "echo 1",
+            "extract": "scalar",
+            "doc": "docs/x.md",
+        }
+        ac = proposals.make("add_check", [self.target("docs/x.md")], {"check_id": "c", "check": chk})
+        self.write("docs/x.md", make_doc(title="edited elsewhere"))  # external change
+        outcomes = ap.apply_batch(self.cfg(), [ac])
+        self.assertEqual(outcomes[0].result, ap.STALE)
+        self.assertEqual(proposals.load_generated_checks(self.cfg()), [])  # never registered
+
+    def test_add_check_orphan_when_doc_not_created_in_batch(self):
+        # The doc exists but was NOT created by an enrich_create in this batch (e.g. its
+        # paired enrich_create was refused, or a crash-reapply). The check must FAIL LOUD,
+        # never silently register against a doc we did not vouch for creating.
+        self.write(self.NEWP, "pre-existing, not ours\n")
+        outcomes = ap.apply_batch(self.cfg(), [self._check()])  # no enrich_create in the batch
+        self.assertEqual(outcomes[0].result, ap.STALE)
+        self.assertIn("absent at draft", outcomes[0].detail)
+        self.assertEqual(proposals.load_generated_checks(self.cfg()), [])
+
+    def test_apply_batch_dry_run_writes_nothing(self):
+        # Dry-run threads the same creation awareness (both preview APPLIED) but writes
+        # neither the doc nor the check.
+        outcomes = ap.apply_batch(self.cfg(), [self._enrich(), self._check()], dry_run=True)
+        self.assertEqual([o.result for o in outcomes], [ap.APPLIED, ap.APPLIED])
+        self.assertFalse((self.root / self.NEWP).exists())
+        self.assertEqual(proposals.load_generated_checks(self.cfg()), [])
+
+
 class ResolveAbsenceTests(ApplyCase):
     def test_informational_no_file_change(self):
         self.write("d.md", make_doc())

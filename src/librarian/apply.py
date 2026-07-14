@@ -358,14 +358,34 @@ _HANDLERS = {
 # --- orchestration -------------------------------------------------------------
 
 
-def stale_targets(cfg: Config, p: proposals.Proposal) -> list[str]:
-    """Paths whose current content hash no longer matches the draft-time guard."""
-    return [t.path for t in p.targets if proposals.file_sha256(cfg.path(t.path)) != t.base_sha256]
+def stale_targets(cfg: Config, p: proposals.Proposal, created_in_batch: set[str] | None = None) -> list[str]:
+    """Paths whose current content hash no longer matches the draft-time guard.
+
+    5.3 intra-batch creation awareness: a target absent at draft (base_sha256 == '') that
+    was created by an EARLIER enrich_create in THIS batch is NOT stale — it is our own
+    write, not external drift. Without this a paired enrich_create + add_check orphans the
+    check when enrich_create sorts first (apply order is id-hash, so it's order-flaky). The
+    skip is scoped to base_sha256 == '' so an existed-at-draft target that changed
+    externally still stales (the round-2 clobber gate is untouched)."""
+    created = created_in_batch or ()
+    out = []
+    for t in p.targets:
+        if t.base_sha256 == "" and t.path in created:
+            continue
+        if proposals.file_sha256(cfg.path(t.path)) != t.base_sha256:
+            out.append(t.path)
+    return out
 
 
-def apply_one(cfg: Config, p: proposals.Proposal, *, dry_run: bool = False) -> Outcome:
+def apply_one(
+    cfg: Config,
+    p: proposals.Proposal,
+    *,
+    dry_run: bool = False,
+    created_in_batch: set[str] | None = None,
+) -> Outcome:
     paths = [t.path for t in p.targets]
-    stale = stale_targets(cfg, p)
+    stale = stale_targets(cfg, p, created_in_batch)
     if p.type == "merge":
         # The canonical is intentionally mutated by the carry_over fold; its staleness is
         # guarded inside _apply_merge via action.canonical_sha256 (idempotency-aware), so it
@@ -373,7 +393,18 @@ def apply_one(cfg: Config, p: proposals.Proposal, *, dry_run: bool = False) -> O
         canonical = p.action.get("canonical")
         stale = [s for s in stale if s != canonical]
     if stale:
-        detail = f"target(s) changed since draft: {', '.join(stale)} — re-dream"
+        # A stale target that was absent at draft (base '') but is present now — and was NOT
+        # created by an enrich_create in this batch — is the 5.3 orphan case: registering
+        # would attach a check to a doc we did not create. FAIL LOUD with a precise message
+        # rather than the misleading "changed since draft".
+        absent = sorted(t.path for t in p.targets if t.base_sha256 == "" and t.path in stale)
+        if absent:
+            detail = (
+                "target(s) absent at draft but present now, created outside this apply: "
+                f"{', '.join(absent)} — re-dream once the doc exists"
+            )
+        else:
+            detail = f"target(s) changed since draft: {', '.join(stale)} — re-dream"
         return Outcome(p.id, p.type, STALE, detail, paths)
     handler = _HANDLERS.get(p.type)
     if handler is None:
@@ -383,6 +414,26 @@ def apply_one(cfg: Config, p: proposals.Proposal, *, dry_run: bool = False) -> O
     except (OSError, ValueError, KeyError) as e:
         result, detail = ERROR, str(e)
     return Outcome(p.id, p.type, result, detail, paths)
+
+
+def apply_batch(cfg: Config, props: list[proposals.Proposal], *, dry_run: bool = False) -> list[Outcome]:
+    """Apply proposals in sequence, threading intra-batch creation awareness (5.3).
+
+    Runs strictly in the given order (the CLI passes the id-hash-sorted selection). As each
+    APPLIED enrich_create lands, its new_path joins `created`; a later proposal whose target
+    was absent at draft but is in `created` skips the (false) stale guard. Populated ONLY on
+    APPLIED enrich_create — a REFUSED/NOOP means the doc pre-existed (its pair's base_sha256
+    is non-empty and self-safe), so it must NOT be treated as created-in-batch."""
+    created: set[str] = set()
+    outcomes: list[Outcome] = []
+    for p in props:
+        oc = apply_one(cfg, p, dry_run=dry_run, created_in_batch=created)
+        outcomes.append(oc)
+        if oc.result == APPLIED and p.type == "enrich_create":
+            new_path = p.action.get("new_path")
+            if new_path:
+                created.add(new_path)
+    return outcomes
 
 
 def select(
