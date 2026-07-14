@@ -190,6 +190,21 @@ class CliTests(CliCase):
         code, _, _ = self.run_sub("search", "of")
         self.assertEqual(code, 1)
 
+    def test_search_body_fallback(self):
+        # A1b two-tier: a body-only word (absent from title/tags/read_when/id)
+        # resolves via the zero-hit fallback that re-reads doc bodies.
+        doc = make_doc(id="ops", read_when="on call").replace(
+            "body text", "the escalation procedure for paging on-call"
+        )
+        self.write("docs/ops.md", doc)
+        self.run_sub("index")
+        code, out, _ = self.run_sub("search", "escalation")
+        self.assertEqual(code, 0)
+        self.assertIn("ops", out)
+        # deterministic: run twice, identical output
+        _c2, out2, _ = self.run_sub("search", "escalation")
+        self.assertEqual(out, out2)
+
     def test_archive_moves_flips_and_reindexes(self):
         self.write("docs/old.md", make_doc(id="old", status="draft", last_verified="2026-07-01"))
         self.run_sub("index")

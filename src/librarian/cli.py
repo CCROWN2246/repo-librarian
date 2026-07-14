@@ -27,6 +27,7 @@ from . import (
     registry,
     render,
     scaffold,
+    search,
     suggest,
     verify,
 )
@@ -578,62 +579,6 @@ def cmd_status(args, rep: Reporter) -> int:
     return 0
 
 
-# Search tokenization (round-3 A1). Split each arg on whitespace so a quoted
-# multi-word query ("pricing salary") does not collapse to one literal substring
-# that matches nothing; fold a trailing 's' (shipments->shipment). These RAW
-# tokens drive the whole-phrase bonus (so an exact read_when phrase like
-# "write a query" still matches). Stopwords are dropped only from the per-token
-# scoring (see cmd_search) — never from the phrase, and never such that the query
-# empties (an empty phrase "" substring-matches every doc: a spurious all-match
-# that also poisons the ingest conflict-check).
-_SEARCH_STOPWORDS = frozenset(
-    {
-        "a",
-        "an",
-        "and",
-        "are",
-        "as",
-        "at",
-        "be",
-        "but",
-        "by",
-        "do",
-        "does",
-        "for",
-        "from",
-        "how",
-        "in",
-        "is",
-        "it",
-        "of",
-        "on",
-        "or",
-        "our",
-        "the",
-        "to",
-        "we",
-        "what",
-        "when",
-        "where",
-        "which",
-        "who",
-        "why",
-        "with",
-        "you",
-    }
-)
-
-
-def _search_tokens(terms: list[str]) -> list[str]:
-    folded = []
-    for term in terms:
-        for word in term.lower().split():
-            if len(word) > 3 and word.endswith("s") and not word.endswith("ss"):
-                word = word[:-1]
-            folded.append(word)
-    return folded
-
-
 def cmd_search(args, rep: Reporter) -> int:
     cfg = _resolve_config(args)
     data = _load_catalog_json(cfg)
@@ -641,33 +586,11 @@ def cmd_search(args, rep: Reporter) -> int:
         res = _build_catalog(cfg)
         render.write_all(cfg, res)
         data = json.loads(render.catalog_json(res))
-    tokens = _search_tokens(args.terms)
-    phrase = " ".join(tokens)
-    # Per-token scoring drops stopwords to cut noise; fall back to the raw tokens
-    # if that would empty the query (guard against the all-match trap).
-    content = [t for t in tokens if t not in _SEARCH_STOPWORDS] or tokens
-    scored = []
-    for e in data["entries"]:
-        read_when = [str(x).lower() for x in e.get("read_when", [])]
-        tags = [str(x).lower() for x in e.get("tags", [])]
-        hay_title = str(e.get("title", "")).lower()
-        hay_id = str(e.get("id", "")).lower()
-        hay_domain = str(e.get("domain", "")).lower()
-        score = 0.0
-        if phrase and any(phrase in rw for rw in read_when):
-            score += 10
-        for t in content:
-            score += 3 * sum(1 for rw in read_when if t in rw)
-            score += 2 * sum(1 for tg in tags if t in tg)
-            if t in hay_title:
-                score += 2
-            if t in hay_id:
-                score += 1.5
-            if t in hay_domain:
-                score += 1
-        if score > 0:
-            scored.append((score, e))
-    scored.sort(key=lambda x: (-x[0], x[1]["path"]))
+    entries = data["entries"]
+    scored = search.rank(entries, args.terms)
+    if not scored and len(entries) <= search.BODY_SEARCH_MAX_DOCS:
+        # two-tier fallback (A1b): re-read doc bodies only on a zero metadata hit
+        scored = search.rank_bodies(cfg, entries, args.terms)
     top = scored[: args.n]
     if args.json:
         rep.emit_json(
@@ -685,7 +608,13 @@ def cmd_search(args, rep: Reporter) -> int:
         )
         return 0 if top else 1
     if not top:
-        rep.say("no matches — try `librarian index` to refresh, or grep")
+        if len(entries) > search.BODY_SEARCH_MAX_DOCS:
+            rep.say(
+                f"no metadata match, and the corpus is too large ({len(entries)} docs) "
+                "to scan bodies — try grep"
+            )
+        else:
+            rep.say("nothing in the catalog mentions that — try `librarian index` to refresh, or grep")
         return 1
     for _score, e in top:
         rw = ", ".join(str(x) for x in e.get("read_when", [])) or "-"
