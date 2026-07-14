@@ -689,6 +689,13 @@ def cmd_ingest(args, rep: Reporter) -> int:
         rep.say("\nIngest one with: librarian ingest <file> [--domain X --authority unverified --dest docs]")
         return 0
 
+    # 1.2: reduce a path that already carries the inbox prefix (or any dir) to its
+    # basename before anything else — ingest is inbox-triage only, so the file must
+    # live in _inbox/, and the refusal message below must quote the SAME form the
+    # accept path resolves. (Do NOT resolve the arg as-given: ingest unlinks the
+    # source after the move, so an arbitrary path could delete a real repo file.)
+    args.file = Path(args.file).name
+
     # Item 1 (CRITICAL): the trust tier is the one decision that must never be a silent
     # default. In a non-interactive context (agent-driven; no TTY) the walkthrough is
     # unreachable, so REFUSE rather than guess. Filing location gets safe defaults; the
@@ -697,7 +704,8 @@ def cmd_ingest(args, rep: Reporter) -> int:
     if non_interactive and args.authority is None:
         suggested = _suggest_authority(args.file)
         rep.error(
-            f"no TTY and no --authority given — refusing to guess the trust tier for {args.file}.\n"
+            f"can't ask which trust tier to use for {args.file} — not running in an interactive "
+            f"terminal, and no --authority was given, so I won't guess.\n"
             f"  Re-run with --authority (suggested: {suggested}).\n"
             "  Tiers: verified / curated / unverified — transcripts & third-party notes are unverified."
         )
@@ -726,6 +734,15 @@ def cmd_ingest(args, rep: Reporter) -> int:
         rep.error(str(e))
         return 2
 
+    # Disclose any silently-used defaults. Computed for BOTH the dry-run preview and the
+    # real filing so the operator sees the full consequence either way (1.4).
+    defaults_used = []
+    if args.domain is None:
+        defaults_used.append(f"domain={domain}")
+    if args.authority is None:
+        defaults_used.append(f"authority={authority}")
+    below_verified = str(authority).lower() != "verified"
+
     if args.dry_run:
         rep.say(f"  DRY RUN — would file {cfg.inbox_dir}/{args.file} -> {result.moved_to}")
         rep.say(f"  domain={domain}  authority={authority}  status={args.status}")
@@ -733,16 +750,15 @@ def cmd_ingest(args, rep: Reporter) -> int:
             block = frontmatter.find_block(result.preview)
             head = result.preview[: block[1]] if block else result.preview[:400]
             rep.say("  frontmatter it would write:\n" + "\n".join("    " + ln for ln in head.splitlines()))
+        if defaults_used:
+            rep.say(f"  would note: default(s) used ({', '.join(defaults_used)}) — REVIEW before trusting.")
+        if below_verified:
+            rep.say(
+                "  would require: conflict-check this against existing verified facts before trusting it."
+            )
         rep.say("\n  Nothing written. Re-run without --dry-run to file it.")
         return 0
 
-    # Disclose any silently-used defaults so a filed doc can't quietly inherit the wrong
-    # tier/domain without a visible note (item 1, part c).
-    defaults_used = []
-    if args.domain is None:
-        defaults_used.append(f"domain={domain}")
-    if args.authority is None:
-        defaults_used.append(f"authority={authority}")
     rep.say(
         f"  filed: {cfg.inbox_dir}/{args.file} -> {result.moved_to}"
         + (" (frontmatter added)" if result.frontmatter_added else "")
@@ -753,7 +769,7 @@ def cmd_ingest(args, rep: Reporter) -> int:
         )
     # D3 (item 5): conflict-check is an agent reflex with no CLI backstop — make it a
     # required, unmissable next step for anything below the `verified` tier.
-    if str(authority).lower() != "verified":
+    if below_verified:
         rep.say(
             "  NEXT (required): conflict-check this against existing verified facts before trusting it — "
             "if it contradicts one, quarantine it with a librarian:disputed marker."

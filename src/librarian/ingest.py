@@ -52,7 +52,10 @@ def ingest_file(
     # like a file (.md suffix) is almost always a mistake; fail loud instead of
     # silently creating a directory literally named "foo.md".
     if dest.endswith(".md"):
-        raise ValueError(f"--dest is a directory; pass '{str(Path(dest).parent) or '.'}/', not '{dest}'")
+        raise ValueError(
+            f"--dest must be a directory (it auto-names the file); "
+            f"pass '{str(Path(dest).parent) or '.'}/', not '{dest}'"
+        )
     dest_dir = cfg.path(dest)
     target = dest_dir / name
     if target.exists():

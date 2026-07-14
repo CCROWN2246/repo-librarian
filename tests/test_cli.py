@@ -442,7 +442,8 @@ class IngestSafetyTests(CliCase):
         self.write("_inbox/customer-call-notes.md", "# Call\n\nEnterprise tier, prorated billing.\n")
         code, _out, err = self.run_sub("ingest", "customer-call-notes.md")
         self.assertEqual(code, 2)
-        self.assertIn("no TTY and no --authority", err)
+        self.assertIn("interactive terminal", err)  # 1.1: plain English, not "no TTY" jargon
+        self.assertNotIn("no TTY", err)
         self.assertIn("suggested: unverified", err)  # E4 cue: "call"/"notes" -> unverified
         # nothing filed, nothing clobbered
         self.assertTrue((self.root / "_inbox" / "customer-call-notes.md").exists())
@@ -478,7 +479,24 @@ class IngestSafetyTests(CliCase):
             "ingest", "notes.md", "--authority", "unverified", "--dest", "docs/notes.md"
         )
         self.assertEqual(code, 2)
-        self.assertIn("--dest is a directory", err)
+        self.assertIn("--dest must be a directory", err)
+
+    def test_inbox_prefix_path_normalized(self):
+        # 1.2: an arg carrying the _inbox/ prefix resolves to the same file the
+        # refusal message quotes — no _inbox/_inbox/ path-doubling.
+        self.write("_inbox/note.md", "# Note\n")
+        code, out, _ = self.run_sub("ingest", "_inbox/note.md", "--authority", "unverified", "--dry-run")
+        self.assertEqual(code, 0)
+        self.assertIn("DRY RUN", out)
+
+    def test_dry_run_previews_defaults_and_conflict_check(self):
+        # 1.4: dry-run surfaces the "defaults used" + conflict-check consequences
+        # the real filing shows, as "would ..." lines.
+        self.write("_inbox/note.md", "# Note\n")
+        code, out, _ = self.run_sub("ingest", "note.md", "--authority", "unverified", "--dry-run")
+        self.assertEqual(code, 0)
+        self.assertIn("would note", out)  # default domain disclosed
+        self.assertIn("would require", out)  # conflict-check for below-verified
         self.assertFalse((self.root / "docs" / "notes.md").is_dir())
 
 
