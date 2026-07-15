@@ -14,7 +14,12 @@ import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from . import proposals
+
 CONFIG_NAME = ".librarian.toml"
+
+# Valid trust-ladder tiers (proposals.TIERS mirrors this; keep in sync).
+AUTOMATION_TIERS = ("off", "branch", "commit")
 
 # Directories the scanner always excludes in addition to config skip_dirs
 # ([paths] index/inbox/archive are appended at load time).
@@ -99,6 +104,7 @@ class Config:
     required_artifact_fields: list[str] = field(default_factory=lambda: list(DEFAULT_REQUIRED_ART))
     # index
     absence_guard: bool = True
+    coverage_guard: bool = True  # flag docs asserting a checkable fact with no verify check
     absence_extra_patterns: list[str] = field(default_factory=list)
     fail_on: list[str] = field(default_factory=list)
     # warn when CATALOG.md's estimated token cost exceeds this (0 = off).
@@ -113,6 +119,14 @@ class Config:
     # dream (overnight/on-nudge maintenance worklist)
     dream_nudge_after_days: int = 14  # 0 = disable the "dream is due" nudge
     dream_merge_similarity: float = 0.6  # metadata Jaccard to flag a merge candidate
+    # automation (the trust-ladder): proposal type -> tier. Default = off for every
+    # type (propose-only); auto-apply is strictly opt-in. The generative/irreversible
+    # risk caps in proposals.cap_tier override anything set here.
+    automation_tiers: dict[str, str] = field(default_factory=dict)
+    # enrichment
+    enrich_provisional_ttl_days: int = 30  # a provisional doc unreviewed past this is flagged
+    # hooks (the UserPromptSubmit work-resumption nudge)
+    nudge_throttle_minutes: int = 240  # re-check + nudge at most once per this many minutes (0 = off)
     # agent
     agent_claude: bool = True
     agent_agents_md: bool = True
@@ -120,6 +134,10 @@ class Config:
     @property
     def all_skip_dirs(self) -> set[str]:
         return set(self.skip_dirs) | ALWAYS_SKIP | {self.index_dir, self.inbox_dir, self.archive_dir}
+
+    def tier_for(self, proposal_type: str) -> str:
+        """Configured trust-ladder tier for a proposal type (off unless opted in)."""
+        return self.automation_tiers.get(proposal_type, "off")
 
     def path(self, rel: str) -> Path:
         return self.root / rel
@@ -163,6 +181,40 @@ def _take(table: dict, where: str, spec: dict) -> dict:
     if table:
         raise ConfigError(f"unknown key(s) in {where}: {', '.join(sorted(table))}")
     return out
+
+
+def _check_from_generated(d: dict) -> Check | None:
+    """Build a Check from a generated-checks.json entry, or None if malformed.
+
+    Tolerant by design: machine-emitted, so validate the essentials (id, kind,
+    exactly one of cmd/arg, assert needs expect) and skip anything that fails
+    rather than raising — a corrupt sidecar must not take down every command.
+    """
+    if not isinstance(d, dict):
+        return None
+    cid, kind = d.get("id"), d.get("kind")
+    if not isinstance(cid, str) or not cid or kind not in ("assert", "track"):
+        return None
+    if ("cmd" in d) == ("arg" in d):  # need exactly one
+        return None
+    if kind == "assert" and "expect" not in d:
+        return None
+    skip = d.get("skip_if_unset", []) or []
+    if not (isinstance(skip, list) and all(isinstance(x, str) for x in skip)):
+        return None
+    return Check(
+        id=cid,
+        kind=kind,
+        doc=d.get("doc", ""),
+        cmd=d.get("cmd"),
+        arg=d.get("arg"),
+        source=d.get("source", "local"),
+        extract=d.get("extract", "scalar"),
+        expect=d.get("expect"),
+        timeout=d.get("timeout"),
+        skip_if_unset=list(skip),
+        skip_unless=d.get("skip_unless"),
+    )
 
 
 def load(root: Path) -> Config:
@@ -222,9 +274,16 @@ def load(root: Path) -> Config:
     idx = _take(
         data.pop("index", {}),
         "[index]",
-        {"absence_guard": bool, "absence_extra_patterns": list, "fail_on": list, "catalog_token_budget": int},
+        {
+            "absence_guard": bool,
+            "coverage_guard": bool,
+            "absence_extra_patterns": list,
+            "fail_on": list,
+            "catalog_token_budget": int,
+        },
     )
     cfg.absence_guard = idx.get("absence_guard", cfg.absence_guard)
+    cfg.coverage_guard = idx.get("coverage_guard", cfg.coverage_guard)
     cfg.absence_extra_patterns = idx.get("absence_extra_patterns", cfg.absence_extra_patterns)
     cfg.fail_on = idx.get("fail_on", cfg.fail_on)
     cfg.catalog_token_budget = idx.get("catalog_token_budget", cfg.catalog_token_budget)
@@ -299,6 +358,18 @@ def load(root: Path) -> Config:
                 raise ConfigError(f"{where}: uses 'arg' but source {check.source!r} has no command template")
         cfg.checks.append(check)
 
+    # Merge machine-generated checks from _index/generated-checks.json (add_check
+    # proposals). stdlib writes JSON; tomllib is read-only, so machine checks never
+    # touch the TOML. Human checks win on id collision; malformed machine entries are
+    # skipped defensively (a bad sidecar must not brick the whole config).
+    human_ids = {c.id for c in cfg.checks}
+    for gen in proposals.load_generated_checks(cfg):
+        gc = _check_from_generated(gen)
+        if gc is None or gc.id in human_ids or gc.id in seen_ids:
+            continue
+        seen_ids.add(gc.id)
+        cfg.checks.append(gc)
+
     dream = _take(
         data.pop("dream", {}),
         "[dream]",
@@ -306,6 +377,29 @@ def load(root: Path) -> Config:
     )
     cfg.dream_nudge_after_days = dream.get("nudge_after_days", cfg.dream_nudge_after_days)
     cfg.dream_merge_similarity = dream.get("merge_similarity", cfg.dream_merge_similarity)
+
+    # [automation] — dynamic keys (proposal type -> tier), so validate by hand.
+    automation = data.pop("automation", {})
+    if not isinstance(automation, dict):
+        raise ConfigError("[automation]: expected a table")
+    tiers: dict[str, str] = {}
+    for ptype, tier in automation.items():
+        if ptype not in proposals.TYPES:
+            raise ConfigError(
+                f"[automation]: unknown proposal type {ptype!r} (valid: {', '.join(proposals.TYPES)})"
+            )
+        if not isinstance(tier, str) or tier not in AUTOMATION_TIERS:
+            raise ConfigError(
+                f"[automation].{ptype}: tier must be one of {', '.join(AUTOMATION_TIERS)}, got {tier!r}"
+            )
+        tiers[ptype] = tier
+    cfg.automation_tiers = tiers
+
+    enrich = _take(data.pop("enrich", {}), "[enrich]", {"provisional_ttl_days": int})
+    cfg.enrich_provisional_ttl_days = enrich.get("provisional_ttl_days", cfg.enrich_provisional_ttl_days)
+
+    hooks = _take(data.pop("hooks", {}), "[hooks]", {"nudge_throttle_minutes": int})
+    cfg.nudge_throttle_minutes = hooks.get("nudge_throttle_minutes", cfg.nudge_throttle_minutes)
 
     agent = _take(data.pop("agent", {}), "[agent]", {"claude": bool, "agents_md": bool})
     cfg.agent_claude = agent.get("claude", cfg.agent_claude)

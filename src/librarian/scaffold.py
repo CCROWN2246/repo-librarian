@@ -20,6 +20,7 @@ MARKER_END = "<!-- librarian:end -->"
 MANIFEST = ".scaffold.json"
 
 HOOK_COMMAND = "bash .claude/hooks/librarian-session.sh"
+PROMPT_HOOK_COMMAND = "bash .claude/hooks/librarian-prompt.sh"
 
 
 @dataclass
@@ -57,6 +58,43 @@ def _save_manifest(root: Path, index_dir: str, manifest: dict) -> None:
     out = root / index_dir
     out.mkdir(parents=True, exist_ok=True)
     (out / MANIFEST).write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def _ver_tuple(v: str) -> tuple[int, ...]:
+    """Leading-numeric SemVer parse (0.3.0 -> (0,3,0)); ignores any pre-release suffix."""
+    out = []
+    for part in str(v).split("."):
+        digits = ""
+        for ch in part:
+            if ch.isdigit():
+                digits += ch
+            else:
+                break
+        out.append(int(digits) if digits else 0)
+    return tuple(out)
+
+
+def scaffold_staleness(cfg) -> str | None:
+    """A one-line nudge if `.scaffold.json` records an OLDER librarian than the installed
+    one, else None. This retires the stale-scaffold false-feedback class (SYS): a re-init
+    (`--upgrade`) refreshes the managed protocol/glue in place. Only fires when installed is
+    strictly newer than the recorded version — a downgrade or a matching/absent record is
+    silent (no churn, no false nudge). Never initialized (no recorded version) -> None."""
+    from . import __version__
+
+    recorded = _load_manifest(cfg.root, cfg.index_dir).get("librarian_version")
+    if not recorded or recorded == __version__:
+        return None
+    try:
+        behind = _ver_tuple(recorded) < _ver_tuple(__version__)
+    except (ValueError, AttributeError):
+        behind = True  # unparseable record -> a refresh can only help
+    if not behind:
+        return None
+    return (
+        f"scaffold behind: written by v{recorded}, installed v{__version__} — "
+        "run `librarian init --upgrade` to refresh the protocol + .claude glue"
+    )
 
 
 def _write_managed(
@@ -146,6 +184,17 @@ def _apply_block(root: Path, rel: str, content: str, manifest: dict, report: Ini
         manifest["blocks"].append(rel)
 
 
+def _merge_hook(hooks: dict, event: str, command: str) -> bool:
+    """Append a command hook to `event` if absent. Returns True if it was added."""
+    entries = hooks.setdefault(event, [])
+    for entry in entries:
+        for h in entry.get("hooks", []):
+            if h.get("command") == command:
+                return False
+    entries.append({"hooks": [{"type": "command", "command": command}]})
+    return True
+
+
 def _merge_claude_settings(root: Path, report: InitReport) -> None:
     path = root / ".claude" / "settings.json"
     settings: dict = {}
@@ -154,21 +203,22 @@ def _merge_claude_settings(root: Path, report: InitReport) -> None:
             settings = json.loads(path.read_text(encoding="utf-8"))
         except json.JSONDecodeError:
             report.notes.append(
-                ".claude/settings.json is not valid JSON — hook NOT merged; "
-                f"add a SessionStart hook running `{HOOK_COMMAND}` manually"
+                ".claude/settings.json is not valid JSON — hooks NOT merged; add a SessionStart "
+                f"hook (`{HOOK_COMMAND}`) and a UserPromptSubmit hook (`{PROMPT_HOOK_COMMAND}`) manually"
             )
             return
     hooks = settings.setdefault("hooks", {})
-    session = hooks.setdefault("SessionStart", [])
-    for entry in session:
-        for h in entry.get("hooks", []):
-            if h.get("command") == HOOK_COMMAND:
-                report.skipped.append(".claude/settings.json (hook already present)")
-                return
-    session.append({"hooks": [{"type": "command", "command": HOOK_COMMAND}]})
+    merged = []
+    if _merge_hook(hooks, "SessionStart", HOOK_COMMAND):
+        merged.append("SessionStart")
+    if _merge_hook(hooks, "UserPromptSubmit", PROMPT_HOOK_COMMAND):
+        merged.append("UserPromptSubmit")
+    if not merged:
+        report.skipped.append(".claude/settings.json (hooks already present)")
+        return
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(settings, indent=2) + "\n", encoding="utf-8")
-    report.updated.append(".claude/settings.json (SessionStart hook merged)")
+    report.updated.append(f".claude/settings.json ({' + '.join(merged)} hook(s) merged)")
 
 
 def init(root: Path, *, agent: str = "both", index_dir: str = "_index", upgrade: bool = False) -> InitReport:
@@ -224,6 +274,22 @@ def init(root: Path, *, agent: str = "both", index_dir: str = "_index", upgrade:
         )
         _write_managed(
             root,
+            ".claude/commands/librarian-enrich.md",
+            _asset("claude/commands/librarian-enrich.md"),
+            manifest,
+            report,
+            upgrade=upgrade,
+        )
+        _write_managed(
+            root,
+            ".claude/commands/librarian-verify.md",
+            _asset("claude/commands/librarian-verify.md"),
+            manifest,
+            report,
+            upgrade=upgrade,
+        )
+        _write_managed(
+            root,
             ".claude/hooks/librarian-session.sh",
             _asset("claude/librarian-session.sh"),
             manifest,
@@ -231,7 +297,19 @@ def init(root: Path, *, agent: str = "both", index_dir: str = "_index", upgrade:
             upgrade=upgrade,
             executable=True,
         )
+        _write_managed(
+            root,
+            ".claude/hooks/librarian-prompt.sh",
+            _asset("claude/librarian-prompt.sh"),
+            manifest,
+            report,
+            upgrade=upgrade,
+            executable=True,
+        )
         _merge_claude_settings(root, report)
+        report.notes.append(
+            "reload Claude Code (restart the session) to pick up the new /librarian-* slash commands"
+        )
 
     _save_manifest(root, index_dir, manifest)
     report.notes.append("activate the git hook once per clone: git config core.hooksPath .githooks")

@@ -58,23 +58,52 @@ def catalog_md(cfg: Config, res: CatalogResult) -> str:
     return "\n".join(lines).rstrip("\n") + "\n"
 
 
-def staleness_md(cfg: Config, res: CatalogResult) -> str:
+def staleness_md(cfg: Config, res: CatalogResult, failing: list[dict] | None = None) -> str:
     # Line 3 is the legacy summary line — keep its phrase patterns stable; shell
     # hooks in pre-librarian installs grep it.
+    failing = failing or []
+    # 2.1: surface the failing-check count on the compat summary line — but ONLY when > 0,
+    # so a clean repo's line 3 is byte-identical to before (no golden churn, no reorder;
+    # the segment is appended at the END of the ·-list, before the stable "Run" sentence).
+    failing_seg = f" · {len(failing)} failing check(s)" if failing else ""
     lines = [
         f"# STALENESS — {GENERATED}",
         "",
         f"{len(res.inbox_pending)} awaiting intake ({cfg.inbox_dir}) · {len(res.stale)} flagged · "
         f"{len(res.orphans)} orphaned · {len(res.conflicts)} OPEN conflicts "
         f"({len(res.conflicts_ack)} acknowledged) · {len(res.missing_fm)} md need frontmatter · "
-        f"{len(res.uncovered)} code/data unregistered. Run `librarian verify` for facts-vs-live.",
+        f"{len(res.uncovered)} code/data unregistered{failing_seg}. "
+        "Run `librarian verify` for facts-vs-live.",
         "",
         "_Resolve a conflict by: (1) FIXING the doc (correct/remove the line + drop the marker) — the "
-        "repo is the source of truth, so this is preferred; (2) ACKNOWLEDGING it (add `KB-ACK` to the "
-        "marker if intentionally kept); or (3) ARCHIVING the whole doc to "
+        "repo is the source of truth, so this is preferred; (2) ACKNOWLEDGING it (mark the disputed line "
+        "as reviewed if it's intentionally kept); or (3) ARCHIVING the whole doc to "
         f"`{cfg.archive_dir}/` (drops out of the catalog)._",
         "",
     ]
+    # E2 — one severity-ordered roll-up so the correctness signals speak with one voice
+    # (added additively BELOW the compat line 3; the detail sections stay where they are).
+    correctness = []
+    if res.conflicts:
+        correctness.append((len(res.conflicts), "open conflict(s)"))
+    if failing:
+        correctness.append((len(failing), "failing check(s) — verify DRIFT/ERROR"))
+    if res.coverage_gaps:
+        correctness.append((len(res.coverage_gaps), "coverage gap(s) — checkable fact, no check"))
+    if res.absence_claims:
+        correctness.append((len(res.absence_claims), "absence-claim(s) to audit"))
+    if correctness:
+        lines += ["## Correctness (most severe first — details in the sections below)", ""]
+        lines += [f"- **{n}** {label}" for n, label in correctness] + [""]
+    if res.navigator_unconfigured:
+        lines += [
+            "## Routing hub not configured",
+            "",
+            f"_`{res.navigator_unconfigured}` is a Tier-1 'always load' file but still carries the scaffold "
+            "template (bracketed examples). It costs a read every session with no routing payoff. Fill in "
+            "the real task→doc rows and set `status: authoritative`._",
+            "",
+        ]
     if res.registry_errors:
         lines += ["## Registry errors (entries skipped — fix these first)", ""]
         lines += [f"- {e}" for e in res.registry_errors] + [""]
@@ -86,7 +115,7 @@ def staleness_md(cfg: Config, res: CatalogResult) -> str:
         lines += [f"- `{cfg.inbox_dir}/{f}`" for f in res.inbox_pending] + [""]
     if res.conflicts:
         lines += [
-            "## OPEN conflicts (KB-CONTRADICTED — false-now; FIX the doc, or KB-ACK to keep, or archive)",
+            "## OPEN conflicts (disputed claims — false-now; FIX the doc, ACKNOWLEDGE to keep, or archive)",
             "",
             "| doc | line | text |",
             "|-----|------|------|",
@@ -94,7 +123,7 @@ def staleness_md(cfg: Config, res: CatalogResult) -> str:
         lines += [f"| `{p}` | {i} | {t} |" for (p, i, t) in sorted(res.conflicts)] + [""]
     if res.conflicts_ack:
         lines += [
-            f"_{len(res.conflicts_ack)} acknowledged conflict(s) (KB-ACK) — reviewed + intentionally kept._",
+            f"_{len(res.conflicts_ack)} acknowledged conflict(s) — reviewed + intentionally kept._",
             "",
         ]
     if res.orphans:
@@ -121,7 +150,7 @@ def staleness_md(cfg: Config, res: CatalogResult) -> str:
             "## Absence-claims (ADVISORY — sanity-check, not errors)",
             "",
             '_A confidently-stated gap ("not identified", "TBD", "we don\'t have X") can be '
-            "wrong if the KB already fills it elsewhere. Most hits are legitimate (a real "
+            "wrong if the catalog already fills it elsewhere. Most hits are legitimate (a real "
             "TODO/known gap); the point is to eyeball each: does X already exist in the catalog? "
             "Verify positively before trusting._",
             "",
@@ -129,7 +158,33 @@ def staleness_md(cfg: Config, res: CatalogResult) -> str:
             "|-----|------|------|",
         ]
         lines += [f"| `{p}` | {i} | {t} |" for (p, i, t) in sorted(res.absence_claims)] + [""]
-    if not (res.orphans or res.stale or res.conflicts):
+    if res.coverage_gaps:
+        lines += [
+            "## Correctness coverage (ADVISORY — checkable facts with no verify check)",
+            "",
+            "_These docs assert a number/count/ID but have no `[[verify.checks]]` entry guarding it, so it "
+            "can silently drift from its source. Not every hit warrants a check — the point is the missing "
+            "check is visible. `/librarian-dream` can draft the check for you._",
+            "",
+            "| id | doc | claim |",
+            "|----|-----|-------|",
+        ]
+        lines += [f"| {i} | `{p}` | {t} |" for (i, p, t) in sorted(res.coverage_gaps)] + [""]
+    if failing:
+        lines += [
+            "## Failing checks (verify DRIFT/ERROR — a registered check no longer matches its source)",
+            "",
+            "_Run `librarian verify` to refresh, then fix the doc against the FRESH live value (never the "
+            "cached one) — or `librarian verify --accept <id>` if the new value is the correct one._",
+            "",
+            "| check | status | expect | live | doc |",
+            "|-------|--------|--------|------|-----|",
+        ]
+        lines += [
+            f"| {c['id']} | {c['status']} | {c.get('expect', '-')} | {c.get('live', '-')} | `{c['doc']}` |"
+            for c in failing
+        ] + [""]
+    if not (res.orphans or res.stale or res.conflicts or failing):
         lines.append(
             "Nothing flagged." + (" (See advisory absence-claims above.)" if res.absence_claims else "")
         )
@@ -156,6 +211,7 @@ def catalog_json(res: CatalogResult) -> str:
                 {"path": p, "line": i, "text": t} for p, i, t in sorted(res.conflicts_ack)
             ],
             "absence_claims": [{"path": p, "line": i, "text": t} for p, i, t in sorted(res.absence_claims)],
+            "coverage_gaps": [{"id": i, "path": p, "text": t} for i, p, t in sorted(res.coverage_gaps)],
             "unverified_sources": sorted(d["_path"] for d in res.unverified),
             "uncovered": sorted(res.uncovered),
             "inbox_pending": res.inbox_pending,
@@ -166,8 +222,11 @@ def catalog_json(res: CatalogResult) -> str:
 
 
 def write_all(cfg: Config, res: CatalogResult) -> None:
+    from . import verify  # local import: render is the I/O layer; verify reads provenance.json
+
     out = cfg.path(cfg.index_dir)
     out.mkdir(parents=True, exist_ok=True)
+    failing = verify.failing_checks(cfg)  # last persisted verify run — cheap, never re-runs
     (out / "CATALOG.md").write_text(catalog_md(cfg, res), encoding="utf-8")
-    (out / "STALENESS.md").write_text(staleness_md(cfg, res), encoding="utf-8")
+    (out / "STALENESS.md").write_text(staleness_md(cfg, res, failing), encoding="utf-8")
     (out / "catalog.json").write_text(catalog_json(res), encoding="utf-8")

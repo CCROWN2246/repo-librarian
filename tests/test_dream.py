@@ -4,6 +4,18 @@ from helpers import RepoCase, make_doc
 from librarian import catalog, config, dream, registry
 
 
+class FailingChecksBucketTests(unittest.TestCase):
+    def test_excluded_from_gate_and_hash(self):
+        wl = dream.Worklist()
+        h0 = wl.content_hash()
+        wl.failing_checks = [{"id": "c1", "status": "DRIFT", "doc": "d.md", "expect": "9", "live": "10"}]
+        self.assertTrue(wl.empty)  # a failing check does not make the worklist "non-empty"
+        self.assertEqual(wl.total, 0)  # excluded from total
+        self.assertEqual(wl.counts()["failing_checks"], 1)  # but visible in counts/to_dict
+        self.assertIn("failing_checks", wl.to_dict())
+        self.assertEqual(wl.content_hash(), h0)  # never re-arms the delta-gate nudge (eng-review 7)
+
+
 def _wl(cfg):
     arts, errors = registry.load(cfg)
     res = catalog.build(cfg, config.today(), arts, errors)
@@ -116,6 +128,31 @@ class WorklistTests(RepoCase):
         self.assertIn("docs/empty.md", paths)
         self.assertIn("docs/todo.md", paths)
         self.assertNotIn("docs/good.md", paths)
+
+    def test_retirement_candidates_surface_terminal_status(self):
+        self.write("docs/live.md", make_doc(id="live", status="authoritative", read_when="a task"))
+        self.write("docs/retired.md", make_doc(id="retired", status="retired", read_when="a task"))
+        self.write("docs/done.md", make_doc(id="done", status="shipped", read_when="a task"))
+        _, wl = _wl(self.cfg("\n[taxonomy]\nstatuses = ['authoritative', 'retired', 'shipped']\n"))
+        paths = {r["path"] for r in wl.retirement_candidates}
+        self.assertEqual(paths, {"docs/retired.md", "docs/done.md"})
+        self.assertNotIn("docs/live.md", paths)
+        ev = {r["path"]: r["evidence"] for r in wl.retirement_candidates}
+        self.assertEqual(ev["docs/retired.md"], "status=retired")
+
+    def test_retirement_empty_when_all_live(self):
+        self.write("docs/a.md", make_doc(id="a", status="authoritative", read_when="a task"))
+        _, wl = _wl(self.cfg())
+        self.assertEqual(wl.retirement_candidates, [])
+
+    def test_coverage_gaps_in_worklist_but_not_in_nudge(self):
+        # an authoritative doc asserting an unguarded number is a coverage gap...
+        self.write("docs/a.md", make_doc(id="a", read_when="a task") + "\nThe table has 9 columns.\n")
+        _, wl = _wl(self.cfg())
+        self.assertTrue(any(g["path"] == "docs/a.md" for g in wl.coverage_gaps))
+        # ...but coverage alone does NOT make the dream due (no nudge fatigue)
+        self.assertTrue(wl.empty)
+        self.assertEqual(wl.total, 0)
 
     def test_conflicts_and_absence_surface(self):
         body = make_doc(id="c", read_when="x") + (

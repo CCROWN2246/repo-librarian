@@ -46,7 +46,10 @@ class InitTests(ScaffoldCase):
             "CLAUDE.md",
             ".claude/commands/librarian.md",
             ".claude/commands/librarian-dream.md",
+            ".claude/commands/librarian-enrich.md",
+            ".claude/commands/librarian-verify.md",
             ".claude/hooks/librarian-session.sh",
+            ".claude/hooks/librarian-prompt.sh",
             ".claude/settings.json",
             "_index/.scaffold.json",
         ):
@@ -90,6 +93,9 @@ class InitTests(ScaffoldCase):
         self.assertEqual(settings["hooks"]["PostToolUse"][0]["hooks"][0]["command"], "bash mine.sh")
         self.assertTrue(
             any(scaffold.HOOK_COMMAND in json.dumps(e) for e in settings["hooks"]["SessionStart"])
+        )
+        self.assertTrue(
+            any(scaffold.PROMPT_HOOK_COMMAND in json.dumps(e) for e in settings["hooks"]["UserPromptSubmit"])
         )
 
     def test_init_never_overwrites_modified_config(self):
@@ -150,6 +156,49 @@ class BlockHelperTests(unittest.TestCase):
 
     def test_strip_no_block_is_noop(self):
         self.assertEqual(scaffold.strip_block("plain\n"), "plain\n")
+
+
+class ScaffoldStalenessTests(ScaffoldCase):
+    """SYS: `.scaffold.json` librarian_version vs the installed __version__ — the nudge that
+    retires the stale-scaffold false-feedback class."""
+
+    def _cfg(self):
+        from librarian import config
+
+        return config.load(self.root)
+
+    def _minimal_config(self):
+        (self.root / ".librarian.toml").write_text("schema_version = 1\n", encoding="utf-8")
+
+    def _write_manifest(self, version):
+        idx = self.root / "_index"
+        idx.mkdir(parents=True, exist_ok=True)
+        (idx / ".scaffold.json").write_text(
+            json.dumps({"files": {}, "blocks": [], "librarian_version": version}) + "\n",
+            encoding="utf-8",
+        )
+
+    def test_nudges_when_behind(self):
+        self._minimal_config()
+        self._write_manifest("0.0.1")
+        nudge = scaffold.scaffold_staleness(self._cfg())
+        self.assertIsNotNone(nudge)
+        self.assertIn("init --upgrade", nudge)
+        self.assertIn("0.0.1", nudge)
+
+    def test_silent_when_current(self):
+        # a real init records the installed __version__ -> nothing to nudge
+        scaffold.init(self.root, agent="both")
+        self.assertIsNone(scaffold.scaffold_staleness(self._cfg()))
+
+    def test_silent_when_no_manifest(self):
+        self._minimal_config()
+        self.assertIsNone(scaffold.scaffold_staleness(self._cfg()))
+
+    def test_silent_on_downgrade(self):
+        self._minimal_config()
+        self._write_manifest("99.0.0")  # recorded is NEWER than installed -> not "behind"
+        self.assertIsNone(scaffold.scaffold_staleness(self._cfg()))
 
 
 if __name__ == "__main__":

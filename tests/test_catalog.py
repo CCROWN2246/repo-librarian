@@ -17,6 +17,17 @@ class CatalogTests(RepoCase):
         self.assertEqual(res.stale, [])
         self.assertEqual(res.missing_fm, [])
 
+    def test_unconfigured_navigator_flagged(self):
+        self.write("docs/NAVIGATOR.md", make_doc(id="navigator") + "\nThis is a TEMPLATE — replace it.\n")
+        _, res = self.build()
+        self.assertTrue(res.navigator_unconfigured.endswith("docs/NAVIGATOR.md"))
+        self.assertIn("Routing hub not configured", render.staleness_md(self.cfg(), res))
+
+    def test_configured_navigator_not_flagged(self):
+        self.write("docs/NAVIGATOR.md", make_doc(id="navigator", status="authoritative") + "\nreal rows\n")
+        _, res = self.build()
+        self.assertIsNone(res.navigator_unconfigured)
+
     def test_missing_frontmatter(self):
         self.write("docs/plain.md", "# no frontmatter\n")
         _, res = self.build()
@@ -42,9 +53,21 @@ class CatalogTests(RepoCase):
         self.assertTrue(any("missing fields" in why for _, _, why in res.stale))
 
     def test_conflict_marker_open_vs_ack(self):
+        # legacy KB- tokens still parse (dual-parse / back-compat)
         body = make_doc(last_verified="2026-07-01") + (
             "\nclaim one <!-- KB-CONTRADICTED: conflicts with [verified: x] -->\n"
             "claim two <!-- KB-CONTRADICTED: KB-ACK conflicts with [verified: y] -->\n"
+        )
+        self.write("docs/a.md", body)
+        _, res = self.build()
+        self.assertEqual(len(res.conflicts), 1)
+        self.assertEqual(len(res.conflicts_ack), 1)
+
+    def test_new_marker_vocab_open_vs_ack(self):
+        # the new product vocab is detected the same way
+        body = make_doc(last_verified="2026-07-01") + (
+            "\nclaim one <!-- librarian:disputed: conflicts with [verified: x] -->\n"
+            "claim two <!-- librarian:disputed: librarian:ack conflicts with [verified: y] -->\n"
         )
         self.write("docs/a.md", body)
         _, res = self.build()
@@ -64,6 +87,40 @@ class CatalogTests(RepoCase):
         self.write("docs/a.md", doc)
         _, res = self.build()
         self.assertTrue(any("disputed" in why for _, _, why in res.stale))
+
+    def test_coverage_gap_flagged(self):
+        # an authoritative doc asserts a number with no verify check -> coverage gap
+        self.write(
+            "docs/a.md", make_doc(id="a", last_verified="2026-07-01") + "\nThe orders table has 9 columns.\n"
+        )
+        _, res = self.build()
+        self.assertTrue(any(p == "docs/a.md" for _, p, _ in res.coverage_gaps))
+
+    def test_coverage_gap_cleared_by_a_check(self):
+        self.write(
+            "docs/a.md", make_doc(id="a", last_verified="2026-07-01") + "\nThe orders table has 9 columns.\n"
+        )
+        _, res = self.build(
+            "\n[[verify.checks]]\nid='cols'\nkind='assert'\ndoc='docs/a.md'\ncmd='echo 9'\nexpect='9'\n"
+        )
+        self.assertEqual(res.coverage_gaps, [])
+
+    def test_coverage_skips_non_authoritative(self):
+        body = make_doc(id="a", status="provisional", last_verified="2026-07-01") + "\nHas 9 columns.\n"
+        self.write("docs/a.md", body)
+        _, res = self.build()
+        self.assertEqual(res.coverage_gaps, [])
+
+    def test_coverage_skips_code_fences(self):
+        body = make_doc(id="a", last_verified="2026-07-01") + "\n```\ncount = 9\n```\njust prose here.\n"
+        self.write("docs/a.md", body)
+        _, res = self.build()
+        self.assertEqual(res.coverage_gaps, [])  # the only number is inside a code fence
+
+    def test_coverage_guard_off(self):
+        self.write("docs/a.md", make_doc(id="a", last_verified="2026-07-01") + "\nHas 9 columns.\n")
+        _, res = self.build("\n[index]\ncoverage_guard = false\n")
+        self.assertEqual(res.coverage_gaps, [])
 
     def test_unverified_tier_listed(self):
         doc = make_doc(last_verified="2026-07-01").replace(

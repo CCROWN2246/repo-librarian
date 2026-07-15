@@ -32,7 +32,7 @@ What's planted here, on purpose:
   behind the live count, so verify reports CHANGED (not a failure — the value
   legitimately moves; accept it with `--update-baselines`).
 - **A quarantined conflict + an open one** — `transcripts/ops-interview.md`
-  (authority: unverified) claims "about a dozen stations" (acknowledged with KB-ACK)
+  (authority: unverified) claims "about a dozen stations" (acknowledged with librarian:ack)
   and "each station has a region code" (an OPEN conflict, listed in STALENESS.md).
 - **A provisional doc** (`docs/etl-notes.md`) and **an inbox item**
   (`_inbox/vendor-email.md`) so the flagged/intake sections have something to show.

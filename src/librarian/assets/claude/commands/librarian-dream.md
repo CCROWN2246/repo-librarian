@@ -1,11 +1,11 @@
 ---
-description: The Librarian's dream cycle — draft maintenance proposals (conflicts, merges, routing) on a branch. Propose-only; never touches main.
+description: The Librarian's dream cycle — draft maintenance PROPOSALS (conflicts, merges, routing, retirement) as machine-applyable objects you review in the chat. Propose-only.
 allowed-tools: Bash, Read, Edit, Write
 ---
 You are running the knowledge-base **dream cycle**. Its whole contract is: **propose, never
-apply.** You draft recommendations onto a throwaway branch and a `MORNING-REPORT.md`; the human
-reviews and decides. You must not edit any knowledge doc on the main branch, and you must not
-delete anything.
+apply.** You emit structured *proposal objects* (`_index/proposals.json`), present them to the user right
+here in the chat, and only apply the ones they approve. You must not apply your own proposals, edit a
+knowledge doc, or delete anything until the user picks what to apply.
 
 ## Step 0 — deterministic gate (free; may end here)
 Run from the repo root:
@@ -18,64 +18,122 @@ Read the JSON. **If `due` is `false`, STOP immediately** — report the one-line
 nothing else (no branch, no tokens spent on analysis). Most runs end here; that is success, not
 failure.
 
-If `due` is `true`, the `worklist` has four buckets. Note the counts; you'll work only the
-non-empty ones.
+If `due` is `true`, the `worklist` has five actionable buckets (below) plus an advisory `coverage_gaps`
+list. Note the counts; you'll work only the non-empty ones.
 
-## Step 1 — isolate on a branch
+## Step 1 — stay on the user's branch (no branch needed)
+Dreaming does not change any knowledge doc — it only writes proposal objects to `_index/proposals.json`.
+So run it right where the user is; you will not touch their docs until they approve an apply. **Do NOT
+create a separate dream branch** — that just forces the user to git-dance to review. Uncommitted WIP is
+fine; leave it alone.
+
+## Step 2 — judge each non-empty bucket, and emit a proposal per decision
+
+For every decision you make, emit a **proposal object** with `librarian propose` (it reads JSON on
+stdin, hashes the target file for its staleness guard, computes the id, and appends to
+`_index/proposals.json`). You supply the judgment; the CLI supplies the determinism. **Omit
+`base_sha256` and `id` — never hand-compute them.** Leave proposals un-approved; the human approves.
+
+**A. OPEN conflicts** (`worklist.open_conflicts`) — each is a quarantined `librarian:disputed` line.
+Open the doc at that line and the *verified source* the marker cites, then emit exactly one of:
 ```
-git switch -c kb/dream-$(date +%Y%m%d) 2>/dev/null || git switch -c kb/dream-$(date +%Y%m%d)-2
+librarian propose <<'JSON'
+{"type":"fix","targets":[{"path":"docs/schema.md","line":34}],
+ "action":{"replace":{"old":"<exact current wrong text>","new":"<corrected text>"},"drop_marker":true},
+ "rationale":"min dock count is 15, not 20",
+ "provenance":{"source":"worklist:open_conflicts","drafted_by":"librarian-dream"}}
+JSON
 ```
-If the repo isn't clean, stash or abort with a note — never mix the user's WIP into a dream branch.
-Everything below happens on this branch. **Do not touch files on main.**
+  - Contradiction worth keeping verbatim (e.g. a transcript)? Use `{"type":"ack","targets":[{"path":"…","line":34}],"action":{"mark":"librarian:ack"}}`.
+  - Whole doc obsolete? Use an `archive` proposal (shape in D).
 
-## Step 2 — the three judgment jobs (only for non-empty buckets)
-
-**A. OPEN conflicts** (`worklist.open_conflicts`) — each is a quarantined `KB-CONTRADICTED` line.
-For each: open the doc at that line, and open the *verified source* the marker cites. Judge and
-recommend exactly one resolution, with a one-line rationale:
-  - **Fix** — the line is simply wrong: give the corrected text (and note the marker should be deleted).
-  - **KB-ACK** — the contradiction is worth keeping verbatim (e.g. a transcript): recommend adding `KB-ACK`.
-  - **Archive** — the whole doc is obsolete: recommend `status: archived` + move to the archive dir.
-Do NOT apply the edit. Write the recommendation + the exact replacement text into the report.
-
-**B. Merge candidates** (`worklist.merge_candidates`) — same-domain doc pairs that *look* similar
-by metadata. For each pair, read both docs and judge whether they are genuinely redundant. If yes:
-propose which is canonical, what unique content the other holds that must survive, and a merge plan.
-If no (a false positive from shared vocabulary): say so in one line and move on. This is a
-pre-filter — expect real false positives.
+**B. Merge candidates** (`worklist.merge_candidates`) — same-domain pairs that *look* similar. Read
+both; if genuinely redundant, put the EXACT content to carry over in `carry_over` and emit the
+proposal. **Do NOT edit the canonical doc yet** — the fold happens at apply time (Step 4), on the user's
+branch, only if they approve. `carry_over` is a list of structured ops, each `{"target": …, "content": …}`:
+- `"target":"read_when"` or `"tags"` → `"content"` is a list of phrases, UNIONED into the canonical's
+  frontmatter (deduped). This is the common case: carry the redundant doc's routing phrases.
+- `"target":"body"` → `"content"` is the LITERAL markdown to append to the canonical body. Put real
+  content here, never a description like "Section X — unique" (that would be welded into the doc verbatim).
+(A bare string or `list[str]` is still accepted as legacy body text.)
+```
+librarian propose <<'JSON'
+{"type":"merge","targets":[{"path":"docs/a.md"},{"path":"docs/b.md"}],
+ "action":{"canonical":"docs/a.md","redundant":"docs/b.md",
+   "carry_over":[{"target":"read_when","content":["deploy rollback","incident runbook"]}],
+   "then_archive":true},
+ "rationale":"near-duplicate; carry b's routing phrases into a"}
+JSON
+```
+If it's a false positive from shared vocabulary, say so in one line and emit nothing.
 
 **C. Routing + absence audit** (`worklist.read_when_todos`, `worklist.absence_claims`):
-  - For each routing TODO (empty/placeholder `read_when`): read the doc and propose 2–4 concrete
-    `read_when` task phrases — the questions a teammate would have in mind when this doc is the
-    right one to open (not keywords; tasks). Give a ready-to-paste `read_when: [...]` line.
-  - For each absence-claim ("we don't have X", "TBD", "not identified"): positively check the
-    catalog + grep for X. If the KB actually fills the gap elsewhere, flag the claim as stale and
-    name the doc that answers it. If the gap is real, say "confirmed gap — leave as-is."
+  - Routing TODO → propose 2–4 concrete task phrases (the questions a teammate has in mind when this
+    doc is the right one to open — tasks, not keywords):
+    `librarian propose <<<'{"type":"set_read_when","targets":[{"path":"docs/x.md"}],"action":{"read_when":["when …","before …"]},"rationale":"empty routing"}'`
+  - Absence-claim → positively check the catalog + grep. If the catalog fills the gap elsewhere, emit
+    `{"type":"resolve_absence","targets":[{"path":"docs/x.md","line":4}],"action":{"verdict":"stale_claim","filled_by":"docs/y.md"}}`
+    (then usually a paired `fix` that edits the claim). If the gap is real, emit
+    `{"type":"resolve_absence",…,"action":{"verdict":"confirmed_gap"}}` — informational; it's a candidate for enrichment later.
+
+**D. Retirement candidates** (`worklist.retirement_candidates`) — docs whose author already set a
+terminal status but which still live in the docs tree. *Positive evidence, not a guess.* Confirm the
+status is genuine and nothing still points to the doc as authoritative, then emit a reversible archive:
+```
+librarian propose <<'JSON'
+{"type":"archive","targets":[{"path":"docs/old-plan.md"}],
+ "action":{"to":"_archive/old-plan.md","set_status":"archived","evidence_kind":"shipped_handoff","evidence_ref":"commit abc123"},
+ "rationale":"plan shipped in HEAD"}
+JSON
+```
+If a live doc still depends on it, say so and emit nothing.
+
+**E. Coverage gaps** (`worklist.coverage_gaps`) — docs asserting a checkable number/count/ID with NO
+verify check guarding it (so it can silently drift from its source). For each that's genuinely worth
+guarding, pick a source from `[verify.sources]` and draft the check with an `add_check` proposal:
+```
+librarian propose <<'JSON'
+{"type":"add_check","targets":[{"path":"docs/data/warehouse-schema.md"}],
+ "action":{"check_id":"customers_column_count","source":"warehouse",
+           "check":{"id":"customers_column_count","source":"warehouse","kind":"assert","doc":"docs/data/warehouse-schema.md",
+                    "cmd":"<query that returns the number>","extract":"scalar","expect":"9"}},
+ "rationale":"guard the '9 columns' claim against the warehouse"}
+JSON
+```
+Skip a gap if the number isn't really a durable fact (a casual figure, an example) or no source fits —
+say so briefly. This bucket is advisory and does NOT drive the nudge; work it opportunistically while
+you're already dreaming.
 
 Keep it bounded: if a bucket is very large, do the first ~10 and note how many remain.
 
-## Step 3 — write the morning report
-Write `MORNING-REPORT.md` at the repo root. Structure it so every item is sk-immable and
-actionable: a summary line of counts, then one section per job type, each proposal with its file,
-the recommendation, and exact copy-paste text. End with a "How to apply" note: review each, apply
-the ones you agree with, then `librarian index` (and `librarian dream --mark-done` to clear the
-nudge). Commit only the report (and any report-adjacent scratch) to the branch:
+## Step 3 — do NOT commit (propose-only)
+`_index/proposals.json` is the machine-applyable artifact; the chat (Step 4) is the review channel. Do
+not commit anything and do not create a report file on the user's branch — proposals are propose-only
+until the user approves. When they later approve and apply, the fixes land in their normal working tree,
+and `_index/proposals.json` + `_index/apply-log.jsonl` are the record they commit with their next commit —
+no throwaway branch needed.
 
-```
-git add MORNING-REPORT.md && git commit -m "chore(kb): dream-cycle proposals $(date +%Y-%m-%d)"
-```
+## Step 4 — review IN CHAT, apply on approval, reset the nudge
+Present the proposals to the user **right here in the chat** — highest-value first, each in one or two
+lines: what it changes, in which file, and why (use the `id` from `librarian propose` output). The user
+never opens a file or touches git to review. Present the proposals as a **numbered list** (never raw
+`p_…` ids); let them say "apply 1 and 3" or "apply all," and translate numbers back to ids yourself.
 
-## Step 4 — reset the nudge, report honestly
-Return to the user's branch (`git switch -`), then:
+When they approve, run `librarian apply --only <id> <id>…` — it applies on their current branch,
+re-checks each staleness guard, applies idempotently, reindexes, and clears the nudge. For a **merge**,
+apply now OWNS the `carry_over` fold into the canonical (do NOT hand-edit it first — that would trip the
+staleness guard); apply folds it idempotently, then archives the redundant one. If only some proposals get
+applied, offer to keep the rest as TODOs (`librarian todos` lists them). Finish with:
 ```
 librarian dream --mark-done
 ```
-Tell the user, in a few lines: which branch the report is on, the count of proposals per type, and
-the single highest-value item to look at first. If a bucket was empty or every merge candidate was
-a false positive, **say so plainly** — do not manufacture work. Never report "maintained" when the
-honest outcome was "nothing needed doing."
+If a bucket was empty or every merge candidate was a false positive, **say so plainly** — do not
+manufacture work. Never report "maintained" when the honest outcome was "nothing needed doing."
 
 ## Invariants (do not violate)
-- Propose-only. No edits to knowledge docs, no deletions, no changes on main.
-- One branch, one report. Bounded work. Honest, specific reporting.
+- Propose-only until the user approves. You emit proposal objects; you do not run `librarian apply`, edit
+  a doc, or delete anything until the user picks what to apply in the chat.
+- Review happens in the chat; apply happens on the user's current branch. Never make them switch branches
+  or touch git to review. No separate dream branch.
+- Never hand-write a proposal `id` or `base_sha256` — always go through `librarian propose`.
 - If `librarian dream` said not due, you should have stopped at Step 0.

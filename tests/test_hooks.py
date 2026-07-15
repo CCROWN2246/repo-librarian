@@ -22,7 +22,11 @@ class HookTests(unittest.TestCase):
         scaffold.init(self.root, agent="both")
 
     def test_scripts_parse(self):
-        for rel in (".githooks/pre-commit", ".claude/hooks/librarian-session.sh"):
+        for rel in (
+            ".githooks/pre-commit",
+            ".claude/hooks/librarian-session.sh",
+            ".claude/hooks/librarian-prompt.sh",
+        ):
             proc = subprocess.run([BASH, "-n", str(self.root / rel)], capture_output=True, text=True)
             self.assertEqual(proc.returncode, 0, f"{rel}: {proc.stderr}")
 
@@ -30,7 +34,11 @@ class HookTests(unittest.TestCase):
         # A teammate without the tool installed must still be able to commit / start sessions.
         env = dict(os.environ, PATH="/usr/bin:/bin")
         subprocess.run(["git", "init", "-q"], cwd=self.root, env=env, check=True)
-        for rel in (".githooks/pre-commit", ".claude/hooks/librarian-session.sh"):
+        for rel in (
+            ".githooks/pre-commit",
+            ".claude/hooks/librarian-session.sh",
+            ".claude/hooks/librarian-prompt.sh",
+        ):
             proc = subprocess.run(
                 [BASH, str(self.root / rel)], cwd=self.root, env=env, capture_output=True, text=True
             )

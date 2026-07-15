@@ -22,8 +22,37 @@ ABSENCE_RE = re.compile(
     r"we don'?t have|does ?n'?t exist|no such (?:doc|source|dataset)|never captured)",
     re.I,
 )
-ABSENCE_SKIP_LINE = ("KB-CONTRADICTED", "KB-ACK", "absence-claim", "ABSENCE_")
-CONFLICT_MARKER = "<!-- KB-CONTRADICTED"
+# Conflict markers: the on-disk quarantine format written into doc bodies. New product
+# vocab (`librarian:disputed` / `librarian:ack`) is written going forward; the legacy
+# `KB-` tokens are still PARSED so docs written before the rename keep working (dual-parse).
+DISPUTED_MARKERS = ("<!-- librarian:disputed", "<!-- KB-CONTRADICTED")
+ACK_TOKENS = ("librarian:ack", "KB-ACK")
+CONFLICT_MARKER = DISPUTED_MARKERS[0]  # canonical (new) form for callers that reference it
+# A NAVIGATOR that still carries this line from the scaffold template is unconfigured — a
+# Tier-1 "always load" file costing a read with no routing payoff. Flag it distinctly rather
+# than as a generic overdue-draft, so "fill the routing hub" is the visible action.
+NAVIGATOR_SENTINEL = "This is a TEMPLATE"
+ABSENCE_SKIP_LINE = (
+    "KB-CONTRADICTED",
+    "KB-ACK",
+    "librarian:disputed",
+    "librarian:ack",
+    "absence-claim",
+    "ABSENCE_",
+)
+
+# Correctness-coverage guard: a quantified factual claim ("17 stations", "9 columns",
+# "count is 20", "95%") that could silently drift from its source. Advisory (like the
+# absence guard) — the point is to surface a doc asserting such a fact with NO verify
+# check guarding it, so the missing check becomes visible. The agent judges which matter.
+# Precision-first (advisory should not cry wolf): match an ASSERTED quantity —
+# "has 9 columns", "count is 20", "= 17", "95%" — not incidental numbers like a version
+# (Node 20), an RFC id (RFC-7807), or a definition ("trailing 90 days").
+CHECKABLE_RE = re.compile(
+    r"(?<![\w.-])\d[\d,]*(?:\.\d+)?\s*%"  # 95%
+    r"|\b(?:is|are|was|were|has|have|of|=|:)\s+\d[\d,]*\b",  # has 9 / count is 20 / = 17
+    re.I,
+)
 
 
 @dataclass
@@ -36,6 +65,8 @@ class CatalogResult:
     conflicts: list[tuple[str, int, str]] = field(default_factory=list)
     conflicts_ack: list[tuple[str, int, str]] = field(default_factory=list)
     absence_claims: list[tuple[str, int, str]] = field(default_factory=list)
+    coverage_gaps: list[tuple[str, str, str]] = field(default_factory=list)  # (id, path, snippet)
+    navigator_unconfigured: str | None = None  # path of a Tier-1 NAVIGATOR still on the scaffold template
     unverified: list[dict] = field(default_factory=list)
     uncovered: list[str] = field(default_factory=list)
     inbox_pending: list[str] = field(default_factory=list)
@@ -69,6 +100,7 @@ class CatalogResult:
             "open_conflicts": len(self.conflicts),
             "acknowledged_conflicts": len(self.conflicts_ack),
             "absence_claims": len(self.absence_claims),
+            "coverage_gaps": len(self.coverage_gaps),
             "unverified_sources": len(self.unverified),
             "inbox_pending": len(self.inbox_pending),
             "registry_errors": len(self.registry_errors),
@@ -97,6 +129,22 @@ def _days_old(value, today: datetime.date) -> int | None:
 def _recheck_days(value) -> int | None:
     m = re.match(r"(\d+)\s*d", str(value))
     return int(m.group(1)) if m else None
+
+
+def _first_checkable_claim(body: str) -> str | None:
+    """First quantified-fact snippet in a doc body, skipping fenced code (examples) and
+    disputed/ack marker lines (annotations, not fresh claims). None if the doc makes none."""
+    in_fence = False
+    for line in body.splitlines():
+        if line.lstrip().startswith("```"):
+            in_fence = not in_fence
+            continue
+        if in_fence or any(tok in line for tok in ABSENCE_SKIP_LINE):
+            continue
+        m = CHECKABLE_RE.search(line)
+        if m:
+            return m.group(0).strip()[:60]
+    return None
 
 
 def build(
@@ -154,6 +202,14 @@ def build(
             reasons.append("missing fields: " + ",".join(miss))
         if d.get("status") in ("provisional", "draft"):
             reasons.append("status=" + str(d["status"]))
+            # Enrichment quarantine (R1): a provisional doc unreviewed past the decay TTL
+            # is called out as un-audited so generated drafts can't quietly become furniture.
+            if d.get("status") == "provisional" and cfg.enrich_provisional_ttl_days > 0:
+                pv_age = _days_old(d.get("last_verified", ""), today)
+                if pv_age is not None and pv_age > cfg.enrich_provisional_ttl_days:
+                    reasons.append(
+                        f"un-audited enrichment {pv_age}d (> TTL {cfg.enrich_provisional_ttl_days}d)"
+                    )
         if str(d.get("has_disputed_claims", "")).lower() == "true":
             reasons.append("has disputed claims")
         rd = _recheck_days(d.get("recheck", ""))
@@ -169,6 +225,11 @@ def build(
 
     res.uncovered = scanner.uncovered(cfg, all_files, reg_paths)
 
+    for path, body in bodies.items():
+        if path.rsplit("/", 1)[-1] == "NAVIGATOR.md" and NAVIGATOR_SENTINEL in body:
+            res.navigator_unconfigured = path
+            break
+
     for path in md:
         body = bodies.get(path)
         if body is None:
@@ -176,12 +237,29 @@ def build(
         for i, line in enumerate(body.splitlines(), 1):
             # Require the literal HTML-comment marker form so docs that merely
             # *describe* the convention in prose/backticks don't false-positive.
-            if CONFLICT_MARKER in line:
-                target = res.conflicts_ack if "KB-ACK" in line else res.conflicts
+            if any(m in line for m in DISPUTED_MARKERS):
+                acked = any(a in line for a in ACK_TOKENS)
+                target = res.conflicts_ack if acked else res.conflicts
                 target.append((path, i, line.strip()[:140]))
             if cfg.absence_guard and not any(s in line for s in ABSENCE_SKIP_LINE):
                 if any(rx.search(line) for rx in absence_res):
                     res.absence_claims.append((path, i, line.strip()[:140]))
+
+    if cfg.coverage_guard:
+        checked_docs = {c.doc for c in cfg.checks}
+        for d in items:
+            # Coverage is the "correctness layer" promise, which is about AUTHORITATIVE facts.
+            # Skip anything not authoritative (drafts/provisional/reference/transcripts) and any
+            # doc that already has a check.
+            if d.get("kind") != "doc" or d.get("status") != "authoritative" or d["_path"] in checked_docs:
+                continue
+            text = bodies.get(d["_path"], "")
+            block = frontmatter.find_block(text)
+            body = text[block[1] :] if block else text  # skip frontmatter (dates/ids aren't claims)
+            snippet = _first_checkable_claim(body)
+            if snippet:
+                res.coverage_gaps.append((str(d.get("id", d["_path"])), d["_path"], snippet))
+        res.coverage_gaps.sort()
 
     res.unverified = [d for d in items if str(d.get("authority", "curated")).lower() == "unverified"]
     res.items = items

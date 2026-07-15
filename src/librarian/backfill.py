@@ -8,6 +8,7 @@ files that already have frontmatter are untouched. Dry-run by default.
 
 from __future__ import annotations
 
+import fnmatch
 import os
 import re
 from dataclasses import dataclass
@@ -60,7 +61,9 @@ def plan(cfg: Config, target: str | None = None) -> list[tuple[Path, BackfillPla
     for dp, dns, fns in os.walk(base):
         dns[:] = sorted(d for d in dns if d not in skip)
         for f in sorted(fns):
-            if not f.endswith(".md") or f in set(cfg.skip_files):
+            # 7.1: skip_files are basename globs (fnmatchcase, case-sensitive); f is
+            # already a bare filename here.
+            if not f.endswith(".md") or any(fnmatch.fnmatchcase(f, pat) for pat in cfg.skip_files):
                 continue
             ap = Path(dp) / f
             rel = os.path.relpath(ap, cfg.root).replace(os.sep, "/")

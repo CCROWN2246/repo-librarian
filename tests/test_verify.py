@@ -18,6 +18,44 @@ def check_toml(id, kind, cmd, *, expect=None, doc="docs/a.md", extra=""):
 
 
 @unittest.skipUnless(POSIX_SH, "verify shells out via /bin/sh (POSIX only)")
+class ProvenanceTests(RepoCase):
+    def test_persists_command_source_value_timestamp(self):
+        cfg = self.cfg(check_toml("count", "assert", "echo 17", expect="17"))
+        run = verify.run(cfg)
+        verify.update_provenance(cfg, run, config.today())
+        data = json.loads(self.read("_index/provenance.json"))
+        self.assertEqual(data["schema_version"], 1)
+        rec = {r["check_id"]: r for r in data["records"]}["count"]
+        self.assertEqual(rec["command"], "echo 17")
+        self.assertEqual(rec["live"], "17")
+        self.assertEqual(rec["status"], "PASS")
+        self.assertEqual(rec["verified_at"], self.TODAY)
+
+    def test_skip_records_excluded(self):
+        cfg = self.cfg(check_toml("later", "assert", "exit 3", expect="x"))
+        verify.update_provenance(cfg, verify.run(cfg), config.today())
+        data = json.loads(self.read("_index/provenance.json"))
+        self.assertEqual(data["records"], [])  # SKIP is not provenance
+
+    def test_filtered_run_merges_not_clobbers(self):
+        cfg = self.cfg(
+            check_toml("a", "assert", "echo 1", expect="1") + check_toml("b", "assert", "echo 2", expect="2")
+        )
+        verify.update_provenance(cfg, verify.run(cfg), config.today())
+        # a filtered re-run must keep b's record
+        verify.update_provenance(cfg, verify.run(cfg, only_id="a"), config.today())
+        ids = {r["check_id"] for r in json.loads(self.read("_index/provenance.json"))["records"]}
+        self.assertEqual(ids, {"a", "b"})
+
+    def test_orphan_pruned(self):
+        cfg = self.cfg(check_toml("keep", "assert", "echo 1", expect="1"))
+        verify.save_provenance(cfg, {"gone": {"check_id": "gone"}, "keep": {"check_id": "keep"}})
+        verify.update_provenance(cfg, verify.run(cfg), config.today())
+        ids = {r["check_id"] for r in json.loads(self.read("_index/provenance.json"))["records"]}
+        self.assertEqual(ids, {"keep"})
+
+
+@unittest.skipUnless(POSIX_SH, "verify shells out via /bin/sh (POSIX only)")
 class VerifyTests(RepoCase):
     def test_assert_pass_and_drift(self):
         cfg = self.cfg(
@@ -142,6 +180,40 @@ class VerifyTests(RepoCase):
         parsed = json.loads(json.dumps(payload))
         self.assertEqual(parsed[0]["status"], "PASS")
         self.assertEqual(parsed[0]["live"], "1")
+
+
+class FailingCheckSignalTests(RepoCase):
+    def test_failing_checks_reads_provenance(self):
+        cfg = self.cfg()
+        verify.save_provenance(
+            cfg,
+            {
+                "ok": {"check_id": "ok", "status": "PASS", "doc": "a.md"},
+                "bad": {
+                    "check_id": "bad",
+                    "status": "DRIFT",
+                    "expect": "9",
+                    "live": "10",
+                    "doc": "b.md",
+                    "verified_at": "2026-07-01",
+                },
+            },
+        )
+        fc = verify.failing_checks(cfg)
+        self.assertEqual([c["id"] for c in fc], ["bad"])  # only DRIFT/ERROR
+        self.assertEqual(fc[0]["live"], "10")
+        self.assertEqual(verify.last_verified_date(cfg), "2026-07-01")
+
+    def test_accept_expect_updates_generated_check(self):
+        from librarian import proposals
+
+        cfg = self.cfg()
+        proposals.save_generated_checks(
+            cfg, [{"id": "c1", "kind": "assert", "expect": "9", "source": "s", "doc": "d.md"}]
+        )
+        self.assertTrue(verify.accept_expect(cfg, "c1", "10"))
+        self.assertEqual(proposals.load_generated_checks(cfg)[0]["expect"], "10")
+        self.assertFalse(verify.accept_expect(cfg, "nope", "1"))  # unknown -> caller guides TOML edit
 
 
 if __name__ == "__main__":
