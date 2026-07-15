@@ -5,6 +5,8 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-07-15
+
 ### Fixed & hardened — round 3 (retrieval honesty + apply/verify integrity + scaffold self-heal)
 - **Search no longer returns a false "no matches."** A quoted multi-word query
   (`librarian search "pricing tiers"`) was matched as one literal substring and found nothing; it now
