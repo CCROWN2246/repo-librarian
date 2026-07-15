@@ -327,9 +327,18 @@ class Determinism(unittest.TestCase):
     test robust where the demo corpus's `python3` source is absent, e.g. Windows CI.)
     """
 
+    # `.last_verified` is a wall-clock stamp (int(time.time())) of when verify last ran —
+    # non-deterministic BY DESIGN (drives the freshness nudge), not a content output. The
+    # determinism invariant is about deterministic content; exclude the operational marker.
+    WALL_CLOCK = {".last_verified"}
+
     def _snapshot(self, root: Path) -> dict:
         idx = root / "_index"
-        return {p.name: p.read_bytes() for p in sorted(idx.glob("*")) if p.is_file()}
+        return {
+            p.name: p.read_bytes()
+            for p in sorted(idx.glob("*"))
+            if p.is_file() and p.name not in self.WALL_CLOCK
+        }
 
     def _run(self, corpus: Path, argv: list[str]) -> None:
         buf = io.StringIO()
