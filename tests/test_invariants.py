@@ -318,13 +318,25 @@ class ArchiveRobustness(InvariantCase):
 
 
 class Determinism(unittest.TestCase):
-    """index/dream/verify run-twice zero diff on a generated corpus (any corpus)."""
+    """Each of index/dream/verify run twice is byte-for-byte zero-diff on a generated corpus.
+
+    The invariant is per-command idempotency (the SAME command repeated gives the same
+    output), NOT trio-idempotency: `verify` legitimately writes provenance that a later
+    `index` surfaces in STALENESS, so a whole maintenance cycle run twice can differ as new
+    information propagates — that is convergence, not non-determinism. (This also keeps the
+    test robust where the demo corpus's `python3` source is absent, e.g. Windows CI.)
+    """
 
     def _snapshot(self, root: Path) -> dict:
         idx = root / "_index"
         return {p.name: p.read_bytes() for p in sorted(idx.glob("*")) if p.is_file()}
 
-    def test_index_dream_verify_run_twice_zero_diff(self):
+    def _run(self, corpus: Path, argv: list[str]) -> None:
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(buf):
+            cli.main([argv[0], "--root", str(corpus), *argv[1:]])
+
+    def test_each_command_run_twice_zero_diff(self):
         import tempfile
 
         import gen_corpus  # from benchmarks/ (on sys.path)
@@ -334,22 +346,25 @@ class Determinism(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             corpus = Path(td) / "corpus"
             gen_corpus.build(corpus, n_docs=40, seed=101, bare=False)
-
-            def run_trio():
-                for cmd in (["index"], ["dream"], ["verify"]):
-                    buf = io.StringIO()
-                    with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(buf):
-                        cli.main([cmd[0], "--root", str(corpus), *cmd[1:]])
-
-            run_trio()
-            first = self._snapshot(corpus)
-            run_trio()
-            second = self._snapshot(corpus)
-            self.assertEqual(sorted(first), sorted(second), "the set of _index files changed on re-run")
-            for name in first:
-                self.assertEqual(
-                    first[name], second[name], f"_index/{name} changed on re-run (non-deterministic)"
-                )
+            # Warm to steady state so provenance/state has fully propagated before we
+            # measure each command's own idempotency.
+            for cmd in (["index"], ["verify"], ["dream"], ["index"]):
+                self._run(corpus, cmd)
+            for cmd in (["index"], ["dream"], ["verify"]):
+                with self.subTest(cmd=cmd[0]):
+                    self._run(corpus, cmd)
+                    first = self._snapshot(corpus)
+                    self._run(corpus, cmd)
+                    second = self._snapshot(corpus)
+                    self.assertEqual(
+                        sorted(first), sorted(second), f"{cmd[0]}: the set of _index files changed on re-run"
+                    )
+                    for name in first:
+                        self.assertEqual(
+                            first[name],
+                            second[name],
+                            f"{cmd[0]}: _index/{name} changed on re-run (non-deterministic)",
+                        )
 
 
 if __name__ == "__main__":
