@@ -5,6 +5,28 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-07-15
+
+### Hardened — adversarial-input robustness (Phase B fuzzing)
+A synthetic-corpus fuzzer (`benchmarks/fuzz.py`) + a permanent invariant suite
+(`tests/test_invariants.py`, `tests/test_fuzz.py`) now assert that **no command crashes on
+any corpus** (empty / malformed frontmatter / malformed TOML / corrupt or valid-but-wrong-type
+sidecars / unicode / binary / dangling references / huge), that the exit-code contract
+(0/1/2) holds uniformly, that `index`/`dream`/`verify` are deterministic, and that untrusted
+paths stay inside the repo. The fuzzer surfaced four defects, all fixed:
+- **Path containment.** `librarian archive` (and a proposal `to`/target path, and `ingest --dest`)
+  could take a `..` path that escaped the repo root and read/move/rewrite a file **outside** the
+  repository. All untrusted path inputs are now confined to the repo root (clean exit 2 otherwise).
+- **Fail loud on malformed proposals.** A `fix` proposal whose `action.replace` wasn't an object
+  crashed `propose` with an `AttributeError` traceback (id-computation ran before validation, and
+  there was no `fix` validation branch at all). It now validates the shape and fails loud.
+- **Binary docs.** Archiving a non-UTF8 `.md` crashed with a `UnicodeDecodeError`; it now moves the
+  file verbatim (byte-preserving), and the shared doc reader tolerates non-UTF8 input.
+- **Non-dict JSON sidecars.** A state file (`catalog.json`, `baselines.json`, `provenance.json`,
+  `.last_dream`, the apply-log, the scaffold manifest) containing valid JSON that wasn't the expected
+  object (`null` / `[]` / `42` / `"s"`) slipped past the JSONDecodeError guard and crashed several
+  commands on `.get()`. The loaders now treat a wrong-typed sidecar as empty.
+
 ## [0.4.0] - 2026-07-15
 
 ### Fixed & hardened — round 3 (retrieval honesty + apply/verify integrity + scaffold self-heal)

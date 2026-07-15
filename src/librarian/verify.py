@@ -106,9 +106,10 @@ def load_baselines(cfg: Config) -> dict:
     if not path.is_file():
         return {}
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
+        data = json.loads(path.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError):
         return {}
+    return data if isinstance(data, dict) else {}  # valid JSON but not an object -> treat as empty
 
 
 def save_baselines(cfg: Config, baselines: dict) -> None:
@@ -207,6 +208,8 @@ def load_provenance(cfg: Config) -> dict:
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError):
+        return {}
+    if not isinstance(data, dict):
         return {}
     return {r["check_id"]: r for r in data.get("records", []) if isinstance(r, dict) and r.get("check_id")}
 

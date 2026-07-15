@@ -100,8 +100,9 @@ def _harvest_py(text: str) -> tuple[str | None, str | None]:
 def _harvest_ipynb(text: str) -> tuple[str | None, str | None]:
     try:
         nb = json.loads(text)
-        for cell in nb.get("cells", []):
-            if cell.get("cell_type") == "markdown":
+        cells = nb.get("cells", []) if isinstance(nb, dict) else []
+        for cell in cells:
+            if isinstance(cell, dict) and cell.get("cell_type") == "markdown":
                 src = "".join(cell.get("source", []))
                 m = re.search(r"^#+\s+(.+)$", src, re.MULTILINE)
                 first = m.group(1).strip() if m else src.strip().splitlines()[0].strip()

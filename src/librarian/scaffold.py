@@ -45,7 +45,9 @@ def _load_manifest(root: Path, index_dir: str) -> dict:
     path = root / index_dir / MANIFEST
     if path.is_file():
         try:
-            return json.loads(path.read_text(encoding="utf-8"))
+            data = json.loads(path.read_text(encoding="utf-8"))
+            if isinstance(data, dict):
+                return data
         except (json.JSONDecodeError, OSError):
             pass
     return {"files": {}, "blocks": []}

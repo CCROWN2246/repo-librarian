@@ -142,6 +142,16 @@ class Config:
     def path(self, rel: str) -> Path:
         return self.root / rel
 
+    def within(self, rel: str) -> bool:
+        """True if `rel` resolves inside the repo root — no `..` or symlink escape.
+        Guard untrusted path inputs (archive/ingest destinations, proposal targets)
+        with this so the tool never reads, moves, or writes files outside the repo."""
+        try:
+            (self.root / rel).resolve().relative_to(self.root.resolve())
+            return True
+        except (ValueError, OSError):
+            return False
+
 
 def today() -> datetime.date:
     """Injectable clock: LIBRARIAN_TODAY=YYYY-MM-DD overrides (golden tests)."""
