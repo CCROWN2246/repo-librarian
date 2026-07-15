@@ -476,9 +476,10 @@ def _load_catalog_json(cfg: Config) -> dict | None:
     if not path.is_file():
         return None
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
+        data = json.loads(path.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError):
         return None
+    return data if isinstance(data, dict) else None  # valid JSON but not an object -> treat as absent
 
 
 def _verify_age_days(cfg: Config) -> int | None:

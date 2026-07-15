@@ -145,7 +145,10 @@ def _action_signature(ptype: str, targets: list[Target], action: dict) -> str:
     """
     a = action or {}
     if ptype == "fix":
-        return "old=" + str((a.get("replace") or {}).get("old", ""))
+        # Defensive: a malformed action (replace not a dict) must not crash the id
+        # computation — validation reports it cleanly afterward (fail loud, not a traceback).
+        rep = a.get("replace")
+        return "old=" + str(rep.get("old", "") if isinstance(rep, dict) else "")
     if ptype == "ack":
         lines = ",".join(str(t.line) for t in targets)
         return "mark=" + str(a.get("mark", "")) + "@" + lines
@@ -268,7 +271,26 @@ def _validate_type_specifics(p: Proposal, where: str) -> None:
     an enrich_create MUST carry non-empty source evidence (the empty-source guard, R1 —
     a source that returned nothing can never justify drafting "we have zero X")."""
     a = p.action
-    if p.type == "enrich_create":
+    if p.type == "fix":
+        # A fix rewrites text via action.replace = {"old": <find>, "new": <value>}. Reject a
+        # malformed shape at propose time so it fails LOUD (ProposalError) instead of crashing
+        # id-computation/apply with an AttributeError or silently no-op'ing at apply.
+        rep = a.get("replace")
+        _require(
+            isinstance(rep, dict),
+            f"{where}: fix requires action.replace to be an object with 'old' and 'new'",
+        )
+        old, new = rep.get("old", ""), rep.get("new", "")
+        _require(
+            isinstance(old, str) and isinstance(new, str),
+            f"{where}: fix action.replace.old and .new must be strings",
+        )
+        _require(
+            old.strip() != "" or new.strip() != "",
+            f"{where}: fix action.replace needs a non-empty 'old' (text to find) or "
+            "'new' (the already-applied value)",
+        )
+    elif p.type == "enrich_create":
         _require(bool(a.get("new_path")), f"{where}: enrich_create requires action.new_path")
         evidence = p.provenance.evidence
         _require(

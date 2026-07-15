@@ -56,6 +56,8 @@ def ingest_file(
             f"--dest must be a directory (it auto-names the file); "
             f"pass '{str(Path(dest).parent) or '.'}/', not '{dest}'"
         )
+    if not cfg.within(dest):
+        raise ValueError(f"--dest must stay inside the repo — '{dest}' escapes the repo root")
     dest_dir = cfg.path(dest)
     target = dest_dir / name
     if target.exists():

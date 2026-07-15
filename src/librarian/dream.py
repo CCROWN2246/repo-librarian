@@ -264,9 +264,10 @@ def load_state(cfg: Config) -> dict:
     if not path.is_file():
         return {}
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
+        data = json.loads(path.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError):
         return {}
+    return data if isinstance(data, dict) else {}  # valid JSON but not an object -> treat as empty
 
 
 def mark_done(cfg: Config, wl: Worklist, now: int | None = None) -> None:

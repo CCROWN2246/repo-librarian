@@ -80,14 +80,18 @@ def _drop_marker(text: str, target_line: int | None) -> str:
 
 
 def _read(cfg: Config, rel: str) -> str:
-    return cfg.path(rel).read_text(encoding="utf-8")
+    # Tolerant read (matches ingest): a non-UTF8/binary doc must never crash a handler.
+    # Handlers only write back when they locate their target text, so replacement chars
+    # here can't silently corrupt a real edit.
+    return cfg.path(rel).read_text(encoding="utf-8", errors="replace")
 
 
 def _apply_fix(cfg: Config, p: proposals.Proposal, dry: bool) -> tuple[str, str]:
     tgt = p.targets[0]
     path = cfg.path(tgt.path)
     text = _read(cfg, tgt.path)
-    repl = p.action.get("replace") or {}
+    repl = p.action.get("replace")
+    repl = repl if isinstance(repl, dict) else {}  # tolerate a hand-edited malformed proposal
     old, new = repl.get("old", ""), repl.get("new", "")
     drop = bool(p.action.get("drop_marker"))
     if old and old in text:  # {old present} -> apply the replace (row 1)
@@ -169,6 +173,8 @@ def _next_free_dest(cfg: Config, dest_rel: str) -> str:
 
 
 def _archive_move(cfg: Config, src_rel: str, dest_rel: str, status: str, dry: bool) -> tuple[str, str]:
+    if not cfg.within(src_rel) or not cfg.within(dest_rel):
+        return ERROR, "path escapes the repo root — refusing to move a file outside the repository"
     src, dest = cfg.path(src_rel), cfg.path(dest_rel)
     if not src.exists():
         if dest.exists():
@@ -180,10 +186,16 @@ def _archive_move(cfg: Config, src_rel: str, dest_rel: str, status: str, dry: bo
             f"archive dest {dest_rel} already exists (won't clobber) — "
             f"re-dream with a distinct dest, e.g. {alt}"
         )
-    newtext = _flip_status(_read(cfg, src_rel), status)
+    # A non-UTF8/binary doc has no frontmatter to flip — move it verbatim rather than
+    # rewriting (which would corrupt its bytes) or crashing.
+    try:
+        newtext = _flip_status(src.read_text(encoding="utf-8"), status)
+    except UnicodeDecodeError:
+        newtext = None
     if dry:
         return APPLIED, f"would archive {src_rel} -> {dest_rel} (status={status})"
-    src.write_text(newtext, encoding="utf-8")
+    if newtext is not None:
+        src.write_text(newtext, encoding="utf-8")
     dest.parent.mkdir(parents=True, exist_ok=True)
     shutil.move(str(src), str(dest))
     return APPLIED, f"archived {src_rel} -> {dest_rel} (status={status})"
@@ -477,7 +489,7 @@ def applied_ids_from_log(cfg: Config) -> set[str]:
             rec = json.loads(line)
         except json.JSONDecodeError:
             continue
-        if rec.get("result") in (APPLIED, NOOP) and rec.get("id"):
+        if isinstance(rec, dict) and rec.get("result") in (APPLIED, NOOP) and rec.get("id"):
             ids.add(rec["id"])
     return ids
 
