@@ -5,6 +5,8 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-07-15
+
 ### Hardened — adversarial-input robustness (Phase B fuzzing)
 A synthetic-corpus fuzzer (`benchmarks/fuzz.py`) + a permanent invariant suite
 (`tests/test_invariants.py`, `tests/test_fuzz.py`) now assert that **no command crashes on
