@@ -56,6 +56,25 @@ class QueryTests(CliCase):
         self.assertEqual(code, 1)
         self.assertEqual(json.loads(out)["count"], 0)
 
+    def test_query_json_exposes_truncation(self):
+        # Layer 3 low: a -n cap must be detectable — total/truncated let a consumer tell
+        # "N matches" from "N shown of more", so a dropped match isn't a false absence.
+        self.seed()
+        code, out, _ = self.run_sub("query", "-n", "1", "--json")
+        data = json.loads(out)
+        self.assertEqual(data["count"], 1)
+        self.assertGreater(data["total"], 1)
+        self.assertTrue(data["truncated"])
+        # no cap: nothing truncated
+        _, out2, _ = self.run_sub("query", "-n", "50", "--json")
+        self.assertFalse(json.loads(out2)["truncated"])
+
+    def test_why_json_valid_on_no_provenance(self):
+        # Layer 3 low: why --json must emit valid JSON (not empty stdout) on the first run.
+        code, out, _ = self.run_sub("why", "--json")
+        self.assertEqual(code, 1)
+        self.assertEqual(json.loads(out), {"count": 0, "records": []})  # parses, not empty
+
     def test_status_filter_and_stale_flag(self):
         # a provisional doc is flagged stale by the catalog; query surfaces it
         self.seed()

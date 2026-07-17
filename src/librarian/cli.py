@@ -1025,6 +1025,7 @@ def cmd_query(args, rep: Reporter) -> int:
                 continue
         out.append(e)
     out.sort(key=lambda e: str(e.get("path", "")))
+    total = len(out)  # total matches BEFORE the -n cap, so a consumer can detect truncation
     out = out[: args.n]
     rows = [
         {
@@ -1042,8 +1043,11 @@ def cmd_query(args, rep: Reporter) -> int:
         }
         for e in out
     ]
+    truncated = total > len(rows)
     if args.json:
-        rep.emit_json({"count": len(rows), "results": rows})
+        # `total`/`truncated` let a programmatic consumer detect a dropped match — a
+        # silent `count == -n` could otherwise read as a false absence.
+        rep.emit_json({"count": len(rows), "total": total, "truncated": truncated, "results": rows})
         return 0 if rows else 1
     if not rows:
         rep.say("no catalog entries match — refine the filter, or `librarian index` to refresh")
@@ -1054,15 +1058,17 @@ def cmd_query(args, rep: Reporter) -> int:
             f"  {str(r['id']):28} {str(r['path']):44} "
             f"status={r['status']} verified={r['last_verified'] or '-'}{flag}"
         )
+    if truncated:
+        rep.say(
+            f"  … {total - len(rows)} more match(es) not shown "
+            f"(showing {len(rows)} of {total}); raise -n to see them"
+        )
     return 0
 
 
 def cmd_why(args, rep: Reporter) -> int:
     cfg = _resolve_config(args)
     records = verify.load_provenance(cfg)  # keyed by check_id
-    if not records:
-        rep.say(f"no provenance yet — run `librarian verify` (writes {cfg.index_dir}/provenance.json)")
-        return 1
     terms = [t.lower() for t in args.terms]
     matched = []
     for cid in sorted(records):
@@ -1073,8 +1079,13 @@ def cmd_why(args, rep: Reporter) -> int:
         if not terms or all(t in hay for t in terms):
             matched.append(r)
     if args.json:
+        # Always emit valid JSON — even on the no-provenance first run — so `why --json | jq`
+        # never chokes on empty stdout.
         rep.emit_json({"count": len(matched), "records": matched})
         return 0 if matched else 1
+    if not records:
+        rep.say(f"no provenance yet — run `librarian verify` (writes {cfg.index_dir}/provenance.json)")
+        return 1
     if not matched:
         rep.say("no matching verified fact — try a check id, doc path, or value; or `librarian verify`")
         return 1
