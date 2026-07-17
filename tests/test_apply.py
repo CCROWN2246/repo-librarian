@@ -77,6 +77,24 @@ class FixTests(ApplyCase):
         self.assertIn("is 15.", text)
         self.assertNotIn("KB-CONTRADICTED", text)
 
+    def test_fix_nonunique_old_uses_target_line(self):
+        # Layer 3 medium: a non-unique `old` must be disambiguated by target.line, not
+        # blindly replace the FIRST match (which could rewrite a frozen earlier value).
+        self.write("d.md", "frozen baseline 379 (do not change)\n\nthe current stale value is 379\n")
+        p = proposals.make("fix", [self.target("d.md", line=3)], {"replace": {"old": "379", "new": "412"}})
+        oc = self.apply(p)
+        self.assertEqual(oc.result, ap.APPLIED)
+        lines = self.read("d.md").split("\n")
+        self.assertIn("frozen baseline 379", lines[0])  # earlier occurrence untouched
+        self.assertIn("stale value is 412", lines[2])  # the targeted line was corrected
+
+    def test_fix_nonunique_old_without_line_refuses(self):
+        self.write("d.md", "value 379 here and 379 there\n")
+        p = proposals.make("fix", [self.target("d.md", line=None)], {"replace": {"old": "379", "new": "412"}})
+        oc = self.apply(p)
+        self.assertEqual(oc.result, ap.STALE)
+        self.assertIn("379 here and 379 there", self.read("d.md"))  # nothing edited
+
 
 class MarkerTests(ApplyCase):
     MARKED = (
@@ -270,6 +288,67 @@ class MergeTests(ApplyCase):
             "merge",
         )
         self.assertEqual(proposals.build_from_partial(self.cfg(), _partial(["body text"])).type, "merge")
+
+    def test_self_merge_rejected_at_propose(self):
+        # Layer 3 medium: canonical == redundant would fold a doc into itself then archive
+        # the very doc it claims to keep. Must fail LOUD at propose, never reach apply.
+        self.write("docs/a.md", make_doc(id="a"))
+        with self.assertRaises(proposals.ProposalError):
+            proposals.build_from_partial(
+                self.cfg(),
+                {
+                    "type": "merge",
+                    "targets": [{"path": "docs/a.md"}],
+                    "action": {
+                        "canonical": "docs/a.md",
+                        "redundant": "docs/a.md",
+                        "carry_over": [{"target": "tags", "content": ["x"]}],
+                    },
+                },
+            )
+
+    def test_self_merge_refused_at_apply(self):
+        # defense-in-depth: even bypassing propose validation, apply refuses a self-merge.
+        self.write("docs/a.md", make_doc(id="a"))
+        p = proposals.make(
+            "merge",
+            [self.target("docs/a.md")],
+            {"canonical": "docs/a.md", "redundant": "docs/a.md", "carry_over": [{"target": "tags", "content": ["x"]}]},
+        )
+        oc = self.apply(p)
+        self.assertEqual(oc.result, ap.ERROR)
+        self.assertTrue((self.root / "docs/a.md").exists())  # kept doc NOT retired
+        self.assertFalse((self.root / "_archive/a.md").exists())
+
+    def test_merge_refuses_atomically_when_archive_dest_taken(self):
+        # Layer 3 medium: if the redundant's archive dest already exists, the merge must
+        # REFUSE before folding the canonical — no half-folded partial merge left behind.
+        p = self._pair()  # canonical docs/a.md, redundant docs/b.md, carry_over ["Section X"]
+        self.write("_archive/b.md", "pre-existing archive\n")  # dest taken
+        oc = self.apply(p)
+        self.assertEqual(oc.result, ap.REFUSED)
+        self.assertNotIn("Section X", self.read("docs/a.md"))  # canonical NOT folded
+        self.assertTrue((self.root / "docs/b.md").exists())  # redundant still live
+
+    def test_carry_over_dedups_within_a_single_content_list(self):
+        # Layer 3 low: an internal duplicate in a carry_over content list must fold ONCE.
+        self.write("docs/a.md", make_doc(id="a", read_when="existing"))
+        self.write("docs/b.md", make_doc(id="b"))
+        p = proposals.make(
+            "merge",
+            [self.target("docs/a.md"), self.target("docs/b.md")],
+            {
+                "canonical": "docs/a.md",
+                "redundant": "docs/b.md",
+                "carry_over": [{"target": "read_when", "content": ["dup", "dup", "unique"]}],
+                "then_archive": False,
+            },
+        )
+        oc = self.apply(p)
+        self.assertEqual(oc.result, ap.APPLIED)
+        rw = list((frontmatter.parse(self.read("docs/a.md")).meta or {}).get("read_when") or [])
+        self.assertEqual(rw.count("dup"), 1)
+        self.assertIn("unique", rw)
 
 
 class WritebackSelectTests(ApplyCase):
