@@ -800,9 +800,15 @@ def cmd_ingest(args, rep: Reporter) -> int:
     )
     if existing_fm:
         applied = ["recorded authority"] + (["merged --read-when"] if args.read_when else [])
-        rep.say(f"  NOTE: {args.file} already had frontmatter — kept its own domain/status/recheck; {', '.join(applied)}.")
+        rep.say(
+            f"  NOTE: {args.file} already had frontmatter — kept its own "
+            f"domain/status/recheck; {', '.join(applied)}."
+        )
         if args.domain is not None:
-            rep.say(f"  NOTE: --domain={args.domain} was NOT applied — the doc kept its own domain. Edit the doc to change it.")
+            rep.say(
+                f"  NOTE: --domain={args.domain} was NOT applied — the doc kept its own "
+                "domain. Edit the doc to change it."
+            )
     if defaults_used:
         rep.say(
             f"  NOTE: default(s) used ({', '.join(defaults_used)}) — no flags given; REVIEW before trusting."

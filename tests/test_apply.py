@@ -313,7 +313,11 @@ class MergeTests(ApplyCase):
         p = proposals.make(
             "merge",
             [self.target("docs/a.md")],
-            {"canonical": "docs/a.md", "redundant": "docs/a.md", "carry_over": [{"target": "tags", "content": ["x"]}]},
+            {
+                "canonical": "docs/a.md",
+                "redundant": "docs/a.md",
+                "carry_over": [{"target": "tags", "content": ["x"]}],
+            },
         )
         oc = self.apply(p)
         self.assertEqual(oc.result, ap.ERROR)

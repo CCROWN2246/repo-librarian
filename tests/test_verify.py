@@ -89,7 +89,9 @@ class VerifyTests(RepoCase):
         cfg = self.cfg(check_toml("count", "track", "echo 99"))
         verify.save_baselines(cfg, {"count": {"value": "42", "recorded": "2026-01-01"}})  # 42 vs live 99
         bpath = self.root / "_index" / verify.BASELINES_FILE
-        bpath.write_text("<<<<<<< HEAD\n{}\n=======\n{}\n>>>>>>> branch\n", encoding="utf-8")  # merge-conflict corruption
+        bpath.write_text(
+            "<<<<<<< HEAD\n{}\n=======\n{}\n>>>>>>> branch\n", encoding="utf-8"
+        )  # merge-conflict corruption
         with self.assertRaises(config.ConfigError):
             verify.load_baselines(cfg)
         with self.assertRaises(config.ConfigError):
