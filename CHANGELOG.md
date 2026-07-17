@@ -5,6 +5,8 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-07-17
+
 ### Fixed — semantic correctness (Phase B, Layer 3 adversarial agent sweep)
 A multi-agent semantic-correctness sweep judged command output against known ground truth
 and adversarially verified each finding. Ten defects fixed — all "fail loud / guard the
