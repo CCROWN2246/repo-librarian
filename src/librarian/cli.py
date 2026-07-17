@@ -662,6 +662,12 @@ def cmd_backfill(args, rep: Reporter) -> int:
     )
     for _, p, _text in targets:
         rep.say(f'  {"stamped" if args.write else "would stamp"}: {p.path}  (id={p.id}, title="{p.title}")')
+    disambiguated = [p for _, p, _ in targets if p.id != backfill.slug(p.path)]
+    if disambiguated:
+        rep.warn(
+            f"{len(disambiguated)} id collision(s) auto-suffixed to stay unique: "
+            + ", ".join(f"{p.path} -> id={p.id}" for p in disambiguated)
+        )
     if args.write:
         backfill.apply(
             cfg,
@@ -764,8 +770,9 @@ def cmd_ingest(args, rep: Reporter) -> int:
 
     # Disclose any silently-used defaults. Computed for BOTH the dry-run preview and the
     # real filing so the operator sees the full consequence either way (1.4).
+    existing_fm = getattr(result, "existing_frontmatter", False)
     defaults_used = []
-    if args.domain is None:
+    if args.domain is None and not existing_fm:  # existing-fm docs keep their own domain; default NOT applied
         defaults_used.append(f"domain={domain}")
     if args.authority is None:
         defaults_used.append(f"authority={authority}")
@@ -791,6 +798,17 @@ def cmd_ingest(args, rep: Reporter) -> int:
         f"  filed: {cfg.inbox_dir}/{args.file} -> {result.moved_to}"
         + (" (frontmatter added)" if result.frontmatter_added else "")
     )
+    if existing_fm:
+        applied = ["recorded authority"] + (["merged --read-when"] if args.read_when else [])
+        rep.say(
+            f"  NOTE: {args.file} already had frontmatter — kept its own "
+            f"domain/status/recheck; {', '.join(applied)}."
+        )
+        if args.domain is not None:
+            rep.say(
+                f"  NOTE: --domain={args.domain} was NOT applied — the doc kept its own "
+                "domain. Edit the doc to change it."
+            )
     if defaults_used:
         rep.say(
             f"  NOTE: default(s) used ({', '.join(defaults_used)}) — no flags given; REVIEW before trusting."
@@ -1013,6 +1031,7 @@ def cmd_query(args, rep: Reporter) -> int:
                 continue
         out.append(e)
     out.sort(key=lambda e: str(e.get("path", "")))
+    total = len(out)  # total matches BEFORE the -n cap, so a consumer can detect truncation
     out = out[: args.n]
     rows = [
         {
@@ -1030,8 +1049,11 @@ def cmd_query(args, rep: Reporter) -> int:
         }
         for e in out
     ]
+    truncated = total > len(rows)
     if args.json:
-        rep.emit_json({"count": len(rows), "results": rows})
+        # `total`/`truncated` let a programmatic consumer detect a dropped match — a
+        # silent `count == -n` could otherwise read as a false absence.
+        rep.emit_json({"count": len(rows), "total": total, "truncated": truncated, "results": rows})
         return 0 if rows else 1
     if not rows:
         rep.say("no catalog entries match — refine the filter, or `librarian index` to refresh")
@@ -1042,15 +1064,17 @@ def cmd_query(args, rep: Reporter) -> int:
             f"  {str(r['id']):28} {str(r['path']):44} "
             f"status={r['status']} verified={r['last_verified'] or '-'}{flag}"
         )
+    if truncated:
+        rep.say(
+            f"  … {total - len(rows)} more match(es) not shown "
+            f"(showing {len(rows)} of {total}); raise -n to see them"
+        )
     return 0
 
 
 def cmd_why(args, rep: Reporter) -> int:
     cfg = _resolve_config(args)
     records = verify.load_provenance(cfg)  # keyed by check_id
-    if not records:
-        rep.say(f"no provenance yet — run `librarian verify` (writes {cfg.index_dir}/provenance.json)")
-        return 1
     terms = [t.lower() for t in args.terms]
     matched = []
     for cid in sorted(records):
@@ -1061,8 +1085,13 @@ def cmd_why(args, rep: Reporter) -> int:
         if not terms or all(t in hay for t in terms):
             matched.append(r)
     if args.json:
+        # Always emit valid JSON — even on the no-provenance first run — so `why --json | jq`
+        # never chokes on empty stdout.
         rep.emit_json({"count": len(matched), "records": matched})
         return 0 if matched else 1
+    if not records:
+        rep.say(f"no provenance yet — run `librarian verify` (writes {cfg.index_dir}/provenance.json)")
+        return 1
     if not matched:
         rep.say("no matching verified fact — try a check id, doc path, or value; or `librarian verify`")
         return 1

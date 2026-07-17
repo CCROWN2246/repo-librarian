@@ -3,7 +3,7 @@ import os
 import unittest
 
 from helpers import RepoCase, make_doc
-from librarian import config, verify
+from librarian import cli, config, verify
 
 POSIX_SH = os.name != "nt" and os.path.exists("/bin/sh")
 
@@ -81,6 +81,30 @@ class VerifyTests(RepoCase):
         self.assertEqual(run3.results[0].status, "CHANGED")
         self.assertEqual(run3.results[0].baseline, "41")
         self.assertFalse(run3.failed)  # track never fails the run
+
+    def test_corrupt_baselines_fails_loud_not_silent_drift_mask(self):
+        # Layer 3 medium: a PRESENT-but-corrupt baselines.json must FAIL LOUD, not silently
+        # return {} (which turns CHANGED into NEW and masks drift), and must not be
+        # overwritten by --update-baselines (verify.run raises before update runs).
+        cfg = self.cfg(check_toml("count", "track", "echo 99"))
+        verify.save_baselines(cfg, {"count": {"value": "42", "recorded": "2026-01-01"}})  # 42 vs live 99
+        bpath = self.root / "_index" / verify.BASELINES_FILE
+        bpath.write_text(
+            "<<<<<<< HEAD\n{}\n=======\n{}\n>>>>>>> branch\n", encoding="utf-8"
+        )  # merge-conflict corruption
+        with self.assertRaises(config.ConfigError):
+            verify.load_baselines(cfg)
+        with self.assertRaises(config.ConfigError):
+            verify.run(cfg)  # drift NOT masked — the run fails loud
+        # CLI: verify exits 2 (error), NOT 0-green, and the corrupt file is untouched.
+        code = cli.main(["verify", "--root", str(self.root), "--update-baselines"])
+        self.assertEqual(code, 2)
+        self.assertIn("<<<<<<<", bpath.read_text(encoding="utf-8"))  # not cemented
+
+    def test_absent_baselines_is_not_corrupt(self):
+        # Absent = legitimate first run: returns {} silently (no false alarm).
+        cfg = self.cfg(check_toml("count", "track", "echo 42"))
+        self.assertEqual(verify.load_baselines(cfg), {})
 
     def test_error_on_nonzero_exit(self):
         cfg = self.cfg(check_toml("boom", "assert", "exit 5", expect="x"))

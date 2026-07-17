@@ -5,6 +5,30 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-07-17
+
+### Fixed — semantic correctness (Phase B, Layer 3 adversarial agent sweep)
+A multi-agent semantic-correctness sweep judged command output against known ground truth
+and adversarially verified each finding. Ten defects fixed — all "fail loud / guard the
+degenerate case" violations where the tool silently did the wrong thing and reported success:
+- **Self-referential merge** (`canonical == redundant`) no longer folds a doc into itself and
+  then archives the very doc it claims to keep — rejected at propose (and defensively at apply).
+- **apply-fix respects `target.line`.** A non-unique `old` string is disambiguated by line
+  instead of blindly rewriting the first match (which could edit a frozen earlier value); if the
+  line can't pin it, it refuses loudly rather than guess.
+- **Merge is atomic.** It pre-checks the archive step (dest taken / path escape) *before* folding
+  the canonical, so a refused merge never leaves a half-folded canonical with a live redundant.
+- **A corrupt `baselines.json` fails loud** instead of silently disabling drift detection. A
+  present-but-unreadable/non-object baselines file now errors (drift is not masked, and
+  `--update-baselines` can't cement the drifted value); an *absent* file is still a clean first run.
+- **ingest merges `--read-when`** (and records authority) into a doc that already has frontmatter
+  instead of silently dropping the routing phrases, and discloses accurately what was/wasn't applied.
+- **backfill disambiguates colliding ids** (two paths that slug to the same id) so `CATALOG.md`
+  never gets duplicate identity keys, and its title detection skips fenced code blocks (no more
+  lifting a `#` code comment as the title).
+- **query `--json` exposes `total`/`truncated`** so a `-n` cap is detectable (a silent truncation
+  read as a false absence); **`why --json`** always emits valid JSON, even on the first run.
+
 ## [0.4.1] - 2026-07-15
 
 ### Hardened — adversarial-input robustness (Phase B fuzzing)

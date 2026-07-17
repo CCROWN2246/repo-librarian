@@ -305,6 +305,12 @@ def _validate_type_specifics(p: Proposal, where: str) -> None:
             f"{where}: add_check requires action.check with an id",
         )
     elif p.type == "merge":
+        # A merge folds `redundant` into `canonical`, then retires `redundant`. They MUST be
+        # distinct — a self-merge (canonical == redundant) would fold a doc into itself then
+        # archive the very doc it claims to keep. Fail LOUD at propose, never reach apply.
+        can, red = a.get("canonical"), a.get("redundant")
+        _require(bool(can) and bool(red), f"{where}: merge requires action.canonical and action.redundant")
+        _require(can != red, f"{where}: merge canonical and redundant must be different docs (got {can!r})")
         # carry_over may be absent, a bare str, a list[str] (LEGACY body text), or a
         # list of structured ops {target: read_when|tags|body, content: str|list[str]}.
         # Validate the structured shape so a malformed fold fails LOUD at propose time,

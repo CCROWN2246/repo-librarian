@@ -86,6 +86,16 @@ def _read(cfg: Config, rel: str) -> str:
     return cfg.path(rel).read_text(encoding="utf-8", errors="replace")
 
 
+def _replace_on_line(text: str, old: str, new: str, line: int) -> str | None:
+    """Replace the first `old` on the 1-indexed `line` with `new`; None if it isn't there."""
+    lines = text.split("\n")
+    idx = line - 1
+    if 0 <= idx < len(lines) and old in lines[idx]:
+        lines[idx] = lines[idx].replace(old, new, 1)
+        return "\n".join(lines)
+    return None
+
+
 def _apply_fix(cfg: Config, p: proposals.Proposal, dry: bool) -> tuple[str, str]:
     tgt = p.targets[0]
     path = cfg.path(tgt.path)
@@ -95,7 +105,23 @@ def _apply_fix(cfg: Config, p: proposals.Proposal, dry: bool) -> tuple[str, str]
     old, new = repl.get("old", ""), repl.get("new", "")
     drop = bool(p.action.get("drop_marker"))
     if old and old in text:  # {old present} -> apply the replace (row 1)
-        newtext = text.replace(old, new, 1)
+        if text.count(old) > 1:
+            # Non-unique `old`: replacing the first match could rewrite the WRONG occurrence
+            # (e.g. a frozen historical value on an earlier line). Disambiguate with
+            # target.line, or refuse LOUD rather than silently edit the wrong text.
+            if tgt.line is None:
+                return STALE, (
+                    f"'old' appears {text.count(old)}x in {tgt.path} and no line pins which — "
+                    "re-dream with a unique 'old' (add surrounding context) or a target line"
+                )
+            newtext = _replace_on_line(text, old, new, tgt.line)
+            if newtext is None:
+                return STALE, (
+                    f"'old' not found on line {tgt.line} of {tgt.path} "
+                    f"({text.count(old)} occurrence(s) elsewhere); re-dream"
+                )
+        else:
+            newtext = text.replace(old, new, 1)
         if drop:
             newtext = _drop_marker(newtext, tgt.line)
         result, detail = APPLIED, "replaced wrong text"
@@ -172,20 +198,32 @@ def _next_free_dest(cfg: Config, dest_rel: str) -> str:
     return f"{prefix}{base.stem}.{n}{base.suffix}"
 
 
-def _archive_move(cfg: Config, src_rel: str, dest_rel: str, status: str, dry: bool) -> tuple[str, str]:
+def _archive_refusal(cfg: Config, src_rel: str, dest_rel: str) -> tuple[str, str] | None:
+    """The refusal conditions of an archive move — a path escaping the repo root, or a
+    dest that already exists (won't clobber) — checked WITHOUT mutating anything, so a merge
+    can pre-check atomically before folding the canonical. None if the move can proceed."""
     if not cfg.within(src_rel) or not cfg.within(dest_rel):
         return ERROR, "path escapes the repo root — refusing to move a file outside the repository"
     src, dest = cfg.path(src_rel), cfg.path(dest_rel)
-    if not src.exists():
-        if dest.exists():
-            return NOOP, "already archived"
-        return STALE, "source missing and dest absent; re-dream"
-    if dest.exists():
+    if src.exists() and dest.exists():
         alt = _next_free_dest(cfg, dest_rel)
         return REFUSED, (
             f"archive dest {dest_rel} already exists (won't clobber) — "
             f"re-dream with a distinct dest, e.g. {alt}"
         )
+    return None
+
+
+def _archive_move(cfg: Config, src_rel: str, dest_rel: str, status: str, dry: bool) -> tuple[str, str]:
+    ref = _archive_refusal(cfg, src_rel, dest_rel)
+    if ref is not None:
+        return ref
+    src, dest = cfg.path(src_rel), cfg.path(dest_rel)
+    if not src.exists():
+        if dest.exists():
+            return NOOP, "already archived"
+        return STALE, "source missing and dest absent; re-dream"
+    # src exists and (per _archive_refusal) dest does not -> proceed.
     # A non-UTF8/binary doc has no frontmatter to flip — move it verbatim rather than
     # rewriting (which would corrupt its bytes) or crashing.
     try:
@@ -301,8 +339,11 @@ def _fold_carry_over(cfg: Config, p: proposals.Proposal, dry: bool) -> tuple[str
         if target in ("read_when", "tags"):
             cur = list((frontmatter.parse(newtext).meta or {}).get(target) or [])
             want = content if isinstance(content, list) else [content]
-            merged = cur + [w for w in want if w not in cur]
-            newtext = frontmatter.set_field(newtext, target, merged)
+            new_items: list = []
+            for w in want:  # dedup against the canonical AND within `want` itself
+                if w not in cur and w not in new_items:
+                    new_items.append(w)
+            newtext = frontmatter.set_field(newtext, target, cur + new_items)
         else:
             body_appends.append(str(content).strip())
     if body_appends:
@@ -318,6 +359,15 @@ def _apply_merge(cfg: Config, p: proposals.Proposal, dry: bool) -> tuple[str, st
     redundant, canonical = a.get("redundant"), a.get("canonical")
     if not redundant or not canonical:
         return ERROR, "merge proposal missing action.canonical/redundant"
+    if redundant == canonical:
+        return ERROR, "merge canonical and redundant are the same doc — nothing to merge"
+    # Atomicity: if the then_archive step would refuse (dest taken / path escape), refuse the
+    # WHOLE merge BEFORE folding — never leave a half-folded canonical with a live redundant.
+    dest_rel = a.get("to") or f"{cfg.archive_dir}/{Path(redundant).name}"
+    if a.get("then_archive", True):
+        ref = _archive_refusal(cfg, redundant, dest_rel)
+        if ref is not None:
+            return ref
     refusal = _fold_carry_over(cfg, p, dry)
     if refusal is not None:
         return refusal
@@ -331,8 +381,7 @@ def _apply_merge(cfg: Config, p: proposals.Proposal, dry: bool) -> tuple[str, st
         if not dry:
             src.write_text(newtext, encoding="utf-8")
         return APPLIED, f"marked {redundant} archived (merged into {canonical})"
-    # 3.2: a re-dream may pass action.to to disambiguate a taken archive dest.
-    dest_rel = a.get("to") or f"{cfg.archive_dir}/{Path(redundant).name}"
+    # then_archive path: dest_rel + the archive-refusal pre-check were computed above (atomic).
     result, detail = _archive_move(cfg, redundant, dest_rel, "archived", dry)
     if result == APPLIED:
         detail = f"merged {redundant} into {canonical}; {detail}"
