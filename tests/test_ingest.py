@@ -44,9 +44,31 @@ class IngestTests(RepoCase):
             today=config.today(),
         )
         self.assertFalse(r.frontmatter_added)
+        self.assertTrue(r.existing_frontmatter)
         meta = frontmatter.parse(self.read("docs/note.md")).meta
         self.assertEqual(meta["authority"], "unverified")
         self.assertEqual(meta["id"], "note")  # original meta preserved
+
+    def test_existing_frontmatter_merges_read_when_not_dropped(self):
+        # Layer 3 medium: --read-when was silently dropped on docs that already had
+        # frontmatter. It must now MERGE into the existing routing phrases (additive).
+        self.write("_inbox/note.md", make_doc(id="note", read_when="original phrase"))
+        r = ingest.ingest_file(
+            self.cfg(),
+            "note.md",
+            domain="x",
+            status="reference",
+            authority="unverified",
+            dest="docs",
+            recheck="90d",
+            today=config.today(),
+            read_when=["new routing phrase", "original phrase"],  # one new, one dup
+        )
+        self.assertTrue(r.existing_frontmatter)
+        rw = list((frontmatter.parse(self.read("docs/note.md")).meta or {}).get("read_when") or [])
+        self.assertIn("original phrase", rw)  # kept
+        self.assertIn("new routing phrase", rw)  # merged in (was silently dropped before)
+        self.assertEqual(rw.count("original phrase"), 1)  # not duplicated
 
     def test_non_md_emits_artifact_block(self):
         self.write("_inbox/export.csv", "a,b\n1,2\n")

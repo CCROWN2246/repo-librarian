@@ -23,6 +23,7 @@ class IngestResult:
     frontmatter_added: bool
     artifact_block: str | None = None  # for non-.md files: paste into the registry
     preview: str | None = None  # --dry-run: the .md content that WOULD be written
+    existing_frontmatter: bool = False  # .md that brought its own frontmatter (kept, not overwritten)
 
 
 def pending(cfg: Config) -> list[str]:
@@ -67,6 +68,7 @@ def ingest_file(
     if name.endswith(".md"):
         text = src.read_text(encoding="utf-8", errors="replace")
         added = False
+        existing_fm = False
         if frontmatter.find_block(text) is None:
             meta = {
                 "id": backfill.slug(rel),
@@ -86,15 +88,26 @@ def ingest_file(
             text = frontmatter.serialize(meta) + text
             added = True
         else:
-            # Respect existing frontmatter but make sure the tier is recorded.
+            # The doc brought its own frontmatter: keep the author's single-valued fields
+            # (domain/status/recheck), but still record the trust tier AND merge the passed
+            # routing phrases — read_when is additive, so dropping --read-when silently (the
+            # prior behavior) lost real intent. cmd_ingest discloses what was/wasn't applied.
+            existing_fm = True
             if authority:
                 text = frontmatter.set_field(text, "authority", authority)
+            if read_when:
+                cur = list((frontmatter.parse(text).meta or {}).get("read_when") or [])
+                merged = cur + [ph for ph in read_when if ph not in cur]
+                if merged != cur:
+                    text = frontmatter.set_field(text, "read_when", merged)
         if dry_run:
-            return IngestResult(moved_to=rel, frontmatter_added=added, preview=text)
+            return IngestResult(
+                moved_to=rel, frontmatter_added=added, preview=text, existing_frontmatter=existing_fm
+            )
         dest_dir.mkdir(parents=True, exist_ok=True)
         target.write_text(text, encoding="utf-8")
         src.unlink()
-        return IngestResult(moved_to=rel, frontmatter_added=added)
+        return IngestResult(moved_to=rel, frontmatter_added=added, existing_frontmatter=existing_fm)
 
     # Non-.md: move it and emit a ready-to-paste registry block.
     if dry_run:

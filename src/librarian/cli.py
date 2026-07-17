@@ -764,8 +764,9 @@ def cmd_ingest(args, rep: Reporter) -> int:
 
     # Disclose any silently-used defaults. Computed for BOTH the dry-run preview and the
     # real filing so the operator sees the full consequence either way (1.4).
+    existing_fm = getattr(result, "existing_frontmatter", False)
     defaults_used = []
-    if args.domain is None:
+    if args.domain is None and not existing_fm:  # existing-fm docs keep their own domain; default NOT applied
         defaults_used.append(f"domain={domain}")
     if args.authority is None:
         defaults_used.append(f"authority={authority}")
@@ -791,6 +792,11 @@ def cmd_ingest(args, rep: Reporter) -> int:
         f"  filed: {cfg.inbox_dir}/{args.file} -> {result.moved_to}"
         + (" (frontmatter added)" if result.frontmatter_added else "")
     )
+    if existing_fm:
+        applied = ["recorded authority"] + (["merged --read-when"] if args.read_when else [])
+        rep.say(f"  NOTE: {args.file} already had frontmatter — kept its own domain/status/recheck; {', '.join(applied)}.")
+        if args.domain is not None:
+            rep.say(f"  NOTE: --domain={args.domain} was NOT applied — the doc kept its own domain. Edit the doc to change it.")
     if defaults_used:
         rep.say(
             f"  NOTE: default(s) used ({', '.join(defaults_used)}) — no flags given; REVIEW before trusting."
