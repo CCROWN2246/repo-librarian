@@ -25,7 +25,7 @@ from datetime import date
 from pathlib import Path
 
 from . import extractors, frontmatter
-from .config import Check, Config, Source
+from .config import Check, Config, ConfigError, Source
 
 SKIP_EXIT_CODE = 3
 BASELINES_FILE = "baselines.json"
@@ -104,12 +104,24 @@ def _resolve_cmd(check: Check, source: Source | None) -> str:
 def load_baselines(cfg: Config) -> dict:
     path = cfg.path(cfg.index_dir) / BASELINES_FILE
     if not path.is_file():
-        return {}
+        return {}  # absent = legitimate first run (nothing to compare against yet)
+    # A PRESENT-but-corrupt baselines file must FAIL LOUD, not silently degrade to {}. An empty
+    # baseline set turns every `track` check into NEW instead of CHANGED, masking real drift —
+    # and a following `--update-baselines` would then cement the drifted value. Absent is fine;
+    # corrupt (unreadable, or valid JSON that isn't an object) is a state error, not "no data".
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError):
-        return {}
-    return data if isinstance(data, dict) else {}  # valid JSON but not an object -> treat as empty
+    except (json.JSONDecodeError, OSError) as e:
+        raise ConfigError(
+            f"{path} is present but unreadable ({e}) — drift detection is DISABLED until it is "
+            "fixed or deleted. Delete it to re-baseline, or restore a valid version."
+        ) from e
+    if not isinstance(data, dict):
+        raise ConfigError(
+            f"{path} is present but is not a JSON object (got {type(data).__name__}) — drift "
+            "detection is DISABLED until it is fixed or deleted."
+        )
+    return data
 
 
 def save_baselines(cfg: Config, baselines: dict) -> None:

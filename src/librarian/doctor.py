@@ -132,8 +132,13 @@ def run(cfg: Config) -> DoctorReport:
     if os.name == "nt" and cfg.checks:
         rep.warn("verify runs commands via /bin/sh — on native Windows use WSL/Git Bash")
 
-    # Orphan baselines
-    baselines = verify.load_baselines(cfg)
+    # Orphan baselines — and surface a corrupt baselines file as a diagnostic (drift
+    # detection is disabled while it is corrupt) rather than crashing or exiting silently.
+    try:
+        baselines = verify.load_baselines(cfg)
+    except config.ConfigError as e:
+        rep.warn(str(e))
+        baselines = {}
     orphan_baselines = sorted(set(baselines) - {c.id for c in cfg.checks})
     if orphan_baselines:
         rep.warn(
