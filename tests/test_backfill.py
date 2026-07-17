@@ -10,6 +10,22 @@ class BackfillTests(RepoCase):
         self.assertEqual(backfill.title_of("# The Real Title\ntext", "x.md"), "The Real Title")
         self.assertEqual(backfill.title_of("no heading", "some-notes.md"), "Some Notes")
 
+    def test_title_skips_fenced_code_comment(self):
+        # Layer 3 low: a `#` comment inside a fenced code block must NOT be lifted as the title.
+        text = "```bash\n# not the title\nrun --thing\n```\n\n# Real Heading\n\nbody\n"
+        self.assertEqual(backfill.title_of(text, "x.md"), "Real Heading")
+
+    def test_plan_disambiguates_colliding_ids(self):
+        # Layer 3 medium: two paths that slug to the same id must get UNIQUE ids, or
+        # CATALOG.md ends up with two entries sharing one identity key.
+        self.write("docs/reports/q1.md", "# Q1 sub\n")  # slug -> docs-reports-q1
+        self.write("docs/reports-q1.md", "# Q1 flat\n")  # slug -> docs-reports-q1 (collision)
+        targets = backfill.plan(self.cfg())
+        ids = sorted(p.id for _, p, _ in targets)
+        self.assertEqual(len(ids), len(set(ids)), f"duplicate ids: {ids}")
+        self.assertIn("docs-reports-q1", ids)
+        self.assertIn("docs-reports-q1-2", ids)
+
     def test_plan_skips_covered(self):
         self.write("docs/covered.md", make_doc())
         self.write("docs/naked.md", "# Naked\n")

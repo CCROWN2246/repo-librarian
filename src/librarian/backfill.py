@@ -35,8 +35,15 @@ def slug(rel: str) -> str:
 
 
 def title_of(text: str, rel: str) -> str:
+    in_fence = False
     for line in text.splitlines():
-        m = re.match(r"#\s+(.*)", line.strip())
+        stripped = line.strip()
+        if stripped.startswith("```") or stripped.startswith("~~~"):
+            in_fence = not in_fence  # skip fenced code — a `# comment` inside it is NOT the title
+            continue
+        if in_fence:
+            continue
+        m = re.match(r"#\s+(.*)", stripped)
         if m:
             return m.group(1).strip().strip('"')
     base = re.sub(r"\.md$", "", os.path.basename(rel)).replace("-", " ").replace("_", " ")
@@ -74,6 +81,18 @@ def plan(cfg: Config, target: str | None = None) -> list[tuple[Path, BackfillPla
             if frontmatter.find_block(text) is not None:
                 continue
             out.append((ap, BackfillPlan(path=rel, id=slug(rel), title=title_of(text, rel)), text))
+    # Disambiguate colliding ids: two distinct paths can slug to the same id (e.g.
+    # docs/reports/q1.md and docs/reports-q1.md). The registry loader guards this; backfill
+    # must too, or CATALOG.md ends up with two entries sharing one identity key. Suffix the
+    # later collisions to stay unique; cmd_backfill surfaces which were renamed.
+    seen: set[str] = set()
+    for _ap, p, _text in out:
+        if p.id in seen:
+            base, n = p.id, 2
+            while f"{base}-{n}" in seen:
+                n += 1
+            p.id = f"{base}-{n}"
+        seen.add(p.id)
     return out
 
 

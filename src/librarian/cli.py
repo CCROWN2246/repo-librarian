@@ -662,6 +662,12 @@ def cmd_backfill(args, rep: Reporter) -> int:
     )
     for _, p, _text in targets:
         rep.say(f'  {"stamped" if args.write else "would stamp"}: {p.path}  (id={p.id}, title="{p.title}")')
+    disambiguated = [p for _, p, _ in targets if p.id != backfill.slug(p.path)]
+    if disambiguated:
+        rep.warn(
+            f"{len(disambiguated)} id collision(s) auto-suffixed to stay unique: "
+            + ", ".join(f"{p.path} -> id={p.id}" for p in disambiguated)
+        )
     if args.write:
         backfill.apply(
             cfg,
