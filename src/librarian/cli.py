@@ -17,6 +17,7 @@ from . import (
     __version__,
     backfill,
     catalog,
+    checks,
     config,
     doctor,
     dream,
@@ -119,6 +120,51 @@ def build_parser() -> argparse.ArgumentParser:
         help="update an assert check's expect to the current live value (deliberate sign-off)",
     )
     sp.add_argument("--dry-run", action="store_true", help="don't write any state files")
+
+    sp = sub.add_parser(
+        "add-check",
+        help="wire ONE verify check to a live source (runs it once, seeds expect from the value)",
+    )
+    _add_common(sp)
+    sp.add_argument(
+        "file",
+        nargs="?",
+        default=None,
+        help="a data file to guard (.csv/.tsv/.json); omit when using --cmd",
+    )
+    sp.add_argument(
+        "--intent",
+        default="rows",
+        metavar="INTENT",
+        help="what to guard: rows | schema | length | distinct:<column> (default: rows)",
+    )
+    sp.add_argument("--cmd", default=None, help="a raw shell command instead of a data file + intent")
+    sp.add_argument("--extract", default="scalar", help="extract spec for --cmd (default: scalar)")
+    sp.add_argument("--doc", default=None, help="the doc this fact lives in (named when it drifts)")
+    sp.add_argument("--id", dest="check_id", default=None, help="check id (default: derived from the path)")
+    sp.add_argument("--kind", choices=["assert", "track"], default=None, help="override the drafted kind")
+    sp.add_argument("--expect", default=None, help="assert value (skips the confirm gate — you stated it)")
+    sp.add_argument("--yes", action="store_true", help="confirm the live value as expect without prompting")
+    sp.add_argument(
+        "--print-toml", action="store_true", help="print a [[verify.checks]] block; write nothing"
+    )
+    sp.add_argument("--dry-run", action="store_true", help="show the check and live value; write nothing")
+
+    sp = sub.add_parser(
+        "connect", help="scan a folder of data files and draft a verify check for each (propose-only)"
+    )
+    _add_common(sp)
+    sp.add_argument("dir", help="directory of data files to scan")
+    sp.add_argument("--doc", default=None, help="the doc every drafted check belongs to (else auto/self)")
+    sp.add_argument("--no-schema", action="store_true", help="row counts only — skip the header guards")
+    sp.add_argument(
+        "--write", action="store_true", help="write the drafts as add_check proposals (default: preview)"
+    )
+    sp.add_argument(
+        "--approve",
+        action="store_true",
+        help="with --write: mark the drafts approved so `apply --all` takes them (you reviewed the preview)",
+    )
 
     sp = sub.add_parser("status", help="one-screen health summary")
     _add_common(sp)
@@ -469,6 +515,279 @@ def cmd_verify(args, rep: Reporter) -> int:
         if run.failed:
             rep.say("  a check is failing — run `librarian index` to refresh STALENESS.md.")
     return 1 if run.failed else 0
+
+
+def _human_check_ids(cfg: Config) -> set[str]:
+    """Check ids that come from hand-written .librarian.toml, not the generated sidecar.
+
+    Human TOML wins on id collision (config.load), so writing a sidecar entry under a
+    human id would be silently ignored — the check the user thinks they just wired would
+    never run. Callers refuse instead.
+    """
+    generated = {c.get("id") for c in proposals.load_generated_checks(cfg)}
+    return {c.id for c in cfg.checks} - generated
+
+
+def _resolve_check_doc(cfg: Config, rel: str, explicit: str | None) -> tuple[str, str]:
+    """Decide which doc a drafted check belongs to. Returns (doc, how)."""
+    if explicit:
+        return explicit, "given"
+    res = _build_catalog(cfg)
+    found = checks.attribute_doc(cfg, rel, res.items)
+    if found:
+        return found, "attributed"
+    return rel, "self"
+
+
+def _doc_note(doc: str, how: str) -> str | None:
+    """The honest one-liner about a `doc` we picked rather than were told."""
+    if how == "attributed":
+        return f"  doc: {doc} (the one catalogued doc that cites this file — override with --doc)"
+    if how == "self":
+        return (
+            f"  doc: {doc} (no catalogued doc cites this file, so drift will name the data file "
+            "itself — set --doc to the doc making the claim)"
+        )
+    return None
+
+
+def _write_generated_check(cfg: Config, draft: checks.CheckDraft) -> None:
+    existing = proposals.load_generated_checks(cfg)
+    merged = [c for c in existing if c.get("id") != draft.id] + [draft.to_sidecar()]
+    proposals.save_generated_checks(cfg, merged)
+
+
+def _confirm_expect(args, draft: checks.CheckDraft, live: str, rep: Reporter) -> int:
+    """Resolve an assert check's `expect`. Returns 0 when `draft.expect` is set, else 1.
+
+    Freezing a live value as "correct" is a claim about the world, so it is the one step
+    the tool will not take unattended: no TTY and no --yes/--expect means nothing is
+    written and we say exactly how to proceed.
+    """
+    if args.expect is not None:
+        draft.expect = args.expect
+        if args.expect != live:
+            rep.warn(
+                f"the live value is {live!r} but you passed --expect {args.expect!r} — "
+                "this check starts as DRIFT"
+            )
+        return 0
+    if args.yes:
+        draft.expect = live
+        return 0
+    if sys.stdin.isatty():
+        answer = input(f"  Freeze {live!r} as the expected value? [y/N]: ").strip().lower()
+        if answer in ("y", "yes"):
+            draft.expect = live
+            return 0
+        rep.say("  Nothing written.")
+        return 1
+    rep.say("  NOTHING WRITTEN — an assert check freezes this value as 'correct', which needs a human.")
+    rep.say(f"  If {live!r} is right:  re-run with --yes")
+    rep.say(
+        "  If it isn't:        re-run with --expect <the correct value>, or --kind track to just watch it"
+    )
+    return 1
+
+
+def cmd_add_check(args, rep: Reporter) -> int:
+    cfg = _resolve_config(args)
+    if (args.file is None) == (args.cmd is None):
+        rep.error("give either a data file (with --intent) or --cmd, not both")
+        return 2
+
+    if args.cmd is not None:
+        if not args.check_id:
+            rep.error("--cmd needs an explicit --id (there is no path to derive one from)")
+            return 2
+        if not args.doc:
+            rep.error("--cmd needs --doc (which doc's claim does this command guard?)")
+            return 2
+        draft = checks.CheckDraft(
+            id=args.check_id,
+            kind=args.kind or "assert",
+            doc=args.doc,
+            cmd=args.cmd,
+            extract=args.extract,
+            intent="cmd",
+        )
+        doc_note = None
+    else:
+        rel = args.file
+        if not cfg.within(rel):
+            rep.error(f"{rel} resolves outside the repo root")
+            return 2
+        if not cfg.path(rel).is_file():
+            rep.error(f"no such file: {rel}")
+            return 2
+        doc, how = _resolve_check_doc(cfg, rel, args.doc)
+        doc_note = _doc_note(doc, how)
+        try:
+            draft = checks.draft(cfg, rel, args.intent, doc=doc, check_id=args.check_id)
+        except checks.CheckDraftError as e:
+            rep.error(str(e))
+            return 2
+        if args.kind:
+            draft.kind = args.kind
+
+    human = _human_check_ids(cfg)
+    if draft.id in human:
+        rep.error(
+            f"check id {draft.id!r} already exists in .librarian.toml — hand-written checks win on "
+            "collision, so this one would never run. Pick another --id, or edit that check directly."
+        )
+        return 2
+
+    try:
+        live = checks.probe(cfg, draft.cmd, draft.extract)
+    except checks.CheckDraftError as e:
+        rep.error(str(e))
+        return 2
+
+    rep.say(f"  {draft.id}  ({draft.kind})")
+    if doc_note:
+        rep.say(doc_note)
+    rep.say(f"  cmd: {draft.cmd}")
+    rep.say(f"  live value: {live!r}")
+
+    def done(outcome: str, code: int) -> int:
+        # --json emits exactly one document on EVERY non-usage exit, including the
+        # refusal and preview paths — a silent stdout would read as a crash to a caller.
+        if args.json:
+            rep.emit_json(
+                {
+                    "check": draft.to_sidecar(),
+                    "live": live,
+                    "outcome": outcome,
+                    "written": outcome == "wired",
+                }
+            )
+        return code
+
+    if draft.kind == "assert":
+        if _confirm_expect(args, draft, live, rep) != 0:
+            return done("unconfirmed", 1)
+    elif args.expect is not None:
+        rep.warn("--expect is ignored for a track check (it baselines the value instead of pinning it)")
+
+    if args.print_toml:
+        rep.say("\n  Paste into .librarian.toml (the tool never writes your TOML):\n")
+        rep.say(draft.to_toml())
+        return done("printed", 0)
+    if args.dry_run:
+        rep.say("\n  Nothing written (--dry-run).")
+        return done("dry_run", 0)
+
+    _write_generated_check(cfg, draft)
+    rep.say(f"\n  wired: {draft.id} -> {cfg.index_dir}/{proposals.GENERATED_CHECKS_FILE}")
+    if draft.kind == "track":
+        rep.say(f"  run `librarian verify --id {draft.id} --update-baselines` to record the baseline.")
+    else:
+        rep.say(f"  run `librarian verify --id {draft.id}` to confirm it passes. Commit to record it.")
+    return done("wired", 0)
+
+
+def cmd_connect(args, rep: Reporter) -> int:
+    cfg = _resolve_config(args)
+    rel_dir = args.dir
+    if not cfg.within(rel_dir):
+        rep.error(f"{rel_dir} resolves outside the repo root")
+        return 2
+    if not cfg.path(rel_dir).is_dir():
+        rep.error(f"not a directory: {rel_dir}")
+        return 2
+
+    draftable, skipped = checks.scan(cfg, rel_dir)
+    if not draftable and not skipped:
+        rep.say(f"No data files under {rel_dir} (looking for: {', '.join(cfg.covered_ext)}).")
+        return 0
+
+    res = _build_catalog(cfg)
+    drafts: list[checks.CheckDraft] = []
+    failures: list[tuple[str, str]] = []
+    notes: list[str] = []
+    for rel in draftable:
+        doc = args.doc or checks.attribute_doc(cfg, rel, res.items) or rel
+        if not args.doc and doc == rel:
+            notes.append(rel)
+        try:
+            for d in checks.drafts_for_file(cfg, rel, doc=doc, schema=not args.no_schema):
+                # Probe EVERY draft, not just asserts: filing a check whose command was never
+                # run would ship a guard that quietly errors on the next verify. The value is
+                # only frozen as `expect` for asserts; for track it just proves the command works.
+                d.live = checks.probe(cfg, d.cmd, d.extract)
+                d.expect = d.live if d.kind == "assert" else None
+                drafts.append(d)
+        except checks.CheckDraftError as e:
+            failures.append((rel, str(e)))
+
+    human = _human_check_ids(cfg)
+    collisions = [d.id for d in drafts if d.id in human]
+    drafts = [d for d in drafts if d.id not in human]
+
+    proposal_ids: list[str] = []
+    if args.write and drafts:
+        partials = [
+            d.to_partial(rationale=f"guard {d.origin} ({d.intent}) — drafted by `librarian connect`")
+            for d in drafts
+        ]
+        built = [proposals.build_from_partial(cfg, p, approved=args.approve) for p in partials]
+        proposals.save(cfg, proposals.upsert(proposals.load(cfg), built))
+        proposal_ids = [p.id for p in built]
+
+    if args.json:
+        rep.emit_json(
+            {
+                "dir": rel_dir,
+                "written": bool(args.write),
+                "drafts": [
+                    {**d.to_sidecar(), "intent": d.intent, "origin": d.origin, "live": d.live} for d in drafts
+                ],
+                "skipped": [{"path": p, "reason": r} for p, r in skipped],
+                "failed": [{"path": p, "error": e} for p, e in failures],
+                "id_collisions": collisions,
+                "unattributed": notes,
+            }
+        )
+        return 1 if failures else 0
+
+    for d in drafts:
+        pinned = f" expect={d.expect!r}" if d.kind == "assert" else f" (baselines at {d.live!r})"
+        rep.say(f"  {tag('NEW')} {d.id:44} {d.kind:6}{pinned}")
+        rep.say(f"          {d.cmd}")
+        rep.say(f"          -> guards: {d.doc}")
+    if notes:
+        rep.say(
+            f"\n  {len(notes)} file(s) have no catalogued doc citing them, so their checks name the data "
+            "file itself on drift. Re-run with --doc, or `librarian suggest` them into the catalog first:"
+        )
+        for rel in notes:
+            rep.say(f"    {rel}")
+    if skipped:
+        rep.say(f"\n  skipped {len(skipped)} file(s) — no drafting rule:")
+        for path, reason in skipped:
+            rep.say(f"    {path}: {reason}")
+    if collisions:
+        rep.say(f"\n  {len(collisions)} id(s) already hand-written in .librarian.toml — left alone:")
+        for cid in collisions:
+            rep.say(f"    {cid}")
+    if failures:
+        rep.say(f"\n  {len(failures)} file(s) FAILED to probe (no check drafted):")
+        for path, err in failures:
+            rep.say(f"    {path}: {err}")
+
+    if not drafts:
+        rep.say("\n  Nothing to draft.")
+    elif args.write and args.approve:
+        rep.say(f"\n  drafted {len(drafts)} approved add_check proposal(s) — `librarian apply --all`.")
+    elif args.write:
+        rep.say(f"\n  drafted {len(drafts)} add_check proposal(s) — review with `librarian todos`, then:")
+        rep.say("      librarian apply --only " + " ".join(proposal_ids[:4]))
+        if len(proposal_ids) > 4:
+            rep.say(f"      ... ({len(proposal_ids) - 4} more — or re-run with --write --approve)")
+    else:
+        rep.say(f"\n  {len(drafts)} draft(s) — re-run with --write to file them as proposals.")
+    return 1 if failures else 0
 
 
 def _load_catalog_json(cfg: Config) -> dict | None:
@@ -1374,6 +1693,8 @@ COMMANDS = {
     "index": cmd_index,
     "suggest": cmd_suggest,
     "verify": cmd_verify,
+    "add-check": cmd_add_check,
+    "connect": cmd_connect,
     "status": cmd_status,
     "search": cmd_search,
     "backfill": cmd_backfill,
