@@ -65,7 +65,7 @@ $ cd your-big-repo
 $ librarian init                       # config + protocol + agent glue + hooks
 $ librarian backfill docs/ --write     # skeleton frontmatter onto existing docs
 $ librarian index                      # generate _index/CATALOG.md + STALENESS.md
-$ $EDITOR .librarian.toml              # add your first [[verify.checks]]
+$ librarian connect data/              # draft a check per data file (preview; --write to file them)
 $ librarian verify                     # facts vs live sources
 $ git config core.hooksPath .githooks  # catalog refresh on every commit
 ```
@@ -90,6 +90,8 @@ $ cd examples/demo-repo && librarian verify
 | `librarian init` | Scaffold config, protocol, agent glue, hooks (`--upgrade` / `--uninstall`; idempotent) |
 | `librarian index` | Rebuild the catalog (`--check` gates CI on `[index].fail_on`) |
 | `librarian verify` | Fact-check docs vs live sources (`--update-baselines`, `--stamp`, `--json`) |
+| `librarian add-check FILE --intent rows\|schema\|distinct:COL` | Wire one check, guided: runs it once, shows the live value, seeds `expect` behind a confirm gate (`--cmd` for anything else) |
+| `librarian connect DIR [--write]` | Scan a folder of data files and draft a check per file as reviewable `add_check` proposals |
 | `librarian status` | One-screen health summary (`--hook` powers the session nudge) |
 | `librarian search "task phrase"` | Route by `read_when`/`tags`/`title` — cheaper and truer than grep |
 | `librarian backfill DIR --write` | Bulk-stamp skeleton frontmatter onto existing docs |

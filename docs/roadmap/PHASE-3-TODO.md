@@ -61,10 +61,16 @@ TOML, knowing the `extract` spec syntax (currently only in `extractors.py`'s doc
   from the README) — mental model, the `extract` spec table (promoted out of the code docstring), and
   drop-in recipes for a folder of CSVs (row/distinct/column-presence), read-only SQLite, read-only Postgres
   (with the SKIP-until-connected DSN pattern), an HTTP API `json:` field, and a one-off `cmd` check.
-- [ ] **V2 — `librarian add-check`:** guided single wiring — run the command once, seed `expect` from the
-  live value behind a confirm gate.
-- [ ] **V3 — `librarian connect <dir>`:** the "point it at a folder of CSVs and it drafts a check per file"
-  bulk story, riding the propose→apply spine you already built.
+- [x] **V2 — `librarian add-check`** ✅ **DONE (2026-08-13):** guided single wiring. `add-check <file>
+  --intent rows|schema|distinct:<col>|length` (or any `--cmd`) probes the command once, shows the live
+  value, and writes a self-contained `cmd` check to `generated-checks.json`. An `assert` seeds `expect`
+  only behind a confirm gate (TTY prompt / `--yes` / explicit `--expect`); `track` auto-baselines.
+  `--print-toml` for the hand-owned path, `--dry-run` writes nothing. Refuses an id owned by human TOML.
+- [x] **V3 — `librarian connect <dir>`** ✅ **DONE (2026-08-13):** scans a data folder and drafts a check
+  per file (CSV/TSV row count + whole-header schema guard; JSON array length), each probed live, filed as
+  `add_check` proposals through the propose→apply spine (`--write`, `--approve`). Undraftable files are
+  listed with a reason; a probe failure is a reported failure (exit 1), never a silent skip.
+  Engine: `src/librarian/checks.py`; tests: `tests/test_checks.py`.
 - [ ] **V4 — extractor conveniences (`distinct`) + a data-side coverage nudge** ("you have data files no
   check guards").
 - [ ] **V5 — read-only DB safety pattern** (SELECT-only role, `skip_unless` as the reachability probe;
