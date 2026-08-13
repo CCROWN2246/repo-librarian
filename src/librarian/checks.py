@@ -35,6 +35,11 @@ MAX_SNIFF_BYTES = 64 * 1024
 
 CSV_EXT = (".csv", ".tsv")
 
+# Drafted commands are POSIX shell one-liners (awk/head/tr/sort), run the same way
+# verify.py runs every check. Kept in sync with verify._run_cmd deliberately: a drafted
+# check must execute identically to a hand-written one.
+SHELL = "/bin/sh"
+
 # Extensions we deliberately do not draft for, and the honest reason why. Reported
 # rather than silently dropped: a scan that quietly covers less reads as full coverage.
 SKIP_REASONS = {
@@ -354,9 +359,16 @@ def probe(cfg: Config, cmd: str, extract: str, *, timeout: int | None = None) ->
     missing CLI) instead of silently writing a check that can never pass.
     """
     limit = timeout or cfg.default_timeout
+    if not Path(SHELL).exists():
+        # verify has always shelled out through /bin/sh; drafting inherits that. Say so
+        # plainly instead of surfacing a bare "[WinError 2] cannot find the file".
+        raise CheckDraftError(
+            f"no POSIX shell at {SHELL} — `verify` (and therefore check drafting) shells out "
+            "through it. On Windows, run the librarian from WSL or Git Bash."
+        )
     try:
         proc = subprocess.run(
-            ["/bin/sh", "-c", cmd],
+            [SHELL, "-c", cmd],
             cwd=cfg.root,
             timeout=limit,
             capture_output=True,

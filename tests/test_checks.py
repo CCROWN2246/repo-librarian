@@ -10,12 +10,18 @@ from __future__ import annotations
 import contextlib
 import io
 import json
+import os
 import unittest
 
 from helpers import RepoCase, make_doc
 from librarian import checks, cli, proposals
 
 CSV = "station_id,name,dock_count,active\n1,Harbor,20,1\n2,Union,12,1\n3,Pier,20,0\n"
+
+# Drafted checks are POSIX shell one-liners, run through /bin/sh exactly as verify runs
+# every check. Same guard the rest of the suite uses for shell-dependent tests.
+POSIX_SH = os.name != "nt" and os.path.exists("/bin/sh")
+SHELL_ONLY = unittest.skipUnless(POSIX_SH, "drafted checks shell out via /bin/sh (POSIX only)")
 
 
 class DraftCase(RepoCase):
@@ -30,6 +36,7 @@ class DraftCase(RepoCase):
         self.write("docs/schema.md", make_doc(id="schema", title="Schema"))
 
 
+@SHELL_ONLY
 class CommandTemplateTests(DraftCase):
     def test_rows_counts_final_line_without_trailing_newline(self):
         # the whole reason for awk over `tail | wc -l`: wc drops a final unterminated
@@ -95,6 +102,7 @@ class DraftingRuleTests(DraftCase):
         drafts = checks.drafts_for_file(cfg, "data/stations.csv", doc="d.md", schema=False)
         self.assertEqual([d.intent for d in drafts], ["rows"])
 
+    @SHELL_ONLY
     def test_json_array_drafts_a_length_check(self):
         self.write("data/e.json", '[{"a":1},{"a":2}]\n')
         cfg = self.cfg()
@@ -165,6 +173,7 @@ class AttributionTests(DraftCase):
         self.assertIsNone(checks.attribute_doc(cfg, "data/stations.csv", self._items("docs/a.md")))
 
 
+@SHELL_ONLY
 class ProbeTests(DraftCase):
     def test_failing_command_raises_not_returns_empty(self):
         cfg = self.cfg()
@@ -178,6 +187,7 @@ class ProbeTests(DraftCase):
             checks.probe(cfg, "echo hi", "json:missing")
 
 
+@SHELL_ONLY
 class AddCheckCliTests(DraftCase):
     def test_track_check_writes_without_a_gate(self):
         self.seed()
@@ -325,6 +335,7 @@ class AddCheckCliTests(DraftCase):
                 self.assertEqual(payload["written"], want_outcome == "wired")
 
 
+@SHELL_ONLY
 class ConnectCliTests(DraftCase):
     def test_preview_writes_no_proposals(self):
         self.seed()
