@@ -29,8 +29,9 @@ Two things worth knowing about how these behave:
 - **An `assert` never freezes a value behind your back.** `add-check` asks first (`--yes` to skip the
   prompt, `--expect <value>` to state it yourself); `connect` files drafts as proposals so the review is
   the gate. A frozen `expect` is a claim about the world, so a human signs it.
-- **They write to `_index/generated-checks.json`, not your TOML.** The tool never edits `.librarian.toml`
-  (`tomllib` is read-only), so generated checks are self-contained `cmd` checks that need no
+- **They write to `_index/generated-checks.json`, not your config.** The tool never rewrites
+  `.librarian.toml` — it's yours, comments and all, and `tomllib` can't round-trip it — so generated
+  checks are self-contained `cmd` checks that need no
   `[verify.sources]` entry. `librarian verify` merges them automatically. Want to own one by hand instead?
   `librarian add-check ... --print-toml` prints the block for you to paste.
 

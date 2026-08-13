@@ -22,7 +22,8 @@ TOML and knowing the `extract` spec from a code docstring. Two commands close th
   rather than silently omitted, and a probe failure is reported as a failure (exit 1), never a skip.
 
 Both write to the machine-owned `_index/generated-checks.json` as self-contained `cmd` checks, so they
-need no `[verify.sources]` entry and the read-only-TOML invariant holds. Both refuse an id already owned
+need no `[verify.sources]` entry and `.librarian.toml` is never rewritten (it's hand-authored and
+`tomllib` can't round-trip it without destroying comments). Both refuse an id already owned
 by hand-written TOML (human checks win on collision, so the wired check would silently never run).
 
 `doc` — the file named when a check drifts — is attributed to the one catalogued doc that cites the data

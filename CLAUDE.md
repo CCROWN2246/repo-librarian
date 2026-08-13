@@ -27,7 +27,8 @@ positioning (measured, in `benchmarks/RESULTS.md`): it is a **correctness layer,
 - `verify.py` + `extractors.py` — command-runner checks; exit-3 = SKIP contract; baselines in `_index/baselines.json`.
 - `checks.py` — the verify-onboarding drafter behind `add-check`/`connect`: per-filetype check templates,
   live `probe()`, doc attribution. Drafts are self-contained `cmd` checks into `generated-checks.json`
-  (the tool never writes the user's TOML); a seeded `expect` always passes through a human gate.
+  (hand-authored `.librarian.toml` is never rewritten — `tomllib` can't round-trip comments); a seeded
+  `expect` always passes through a human gate.
 - `dream.py` — deterministic maintenance worklist + delta gate (`is_due`/`mark_done`); `/librarian-dream` is the agent half.
 - `suggest.py`, `backfill.py`, `ingest.py`, `scaffold.py` (init/upgrade/uninstall via hash manifest), `doctor.py`, `output.py`.
 - `assets/` — everything `init` scaffolds into a consuming repo (protocol, NAVIGATOR template, `.claude/` glue, `.githooks/`, config template). Editing agent behavior = edit these.

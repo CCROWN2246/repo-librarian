@@ -7,10 +7,12 @@ columns) and emits a ready check whose `expect` is seeded from the live value.
 
 Two invariants shape every draft:
 
-- **The tool never writes the user's TOML.** `tomllib` is read-only (a documented config
-  invariant), so drafts are `cmd`-based and self-contained — they need no `[verify.sources]`
-  entry and land in the machine-owned `_index/generated-checks.json`, which `config.load`
-  already merges. `to_toml()` exists only for the user who *wants* a hand-owned check.
+- **`.librarian.toml` is hand-authored, so the tool never rewrites it.** Not because writing
+  TOML is impossible (`suggest` already appends `[[artifact]]` blocks to the registry), but
+  because `tomllib` parses without round-tripping: rewriting a human's config would silently
+  destroy their comments and layout. So drafts are `cmd`-based and self-contained — they need
+  no `[verify.sources]` entry and land in the machine-owned `_index/generated-checks.json`,
+  which `config.load` merges. `to_toml()` serves the user who *wants* a hand-owned check.
 - **A seeded `expect` is a claim, so it needs a human.** `add-check` gates an assert behind
   an explicit confirm; `connect` routes drafts through the propose->apply spine (the
   proposal review IS the gate). Neither ever freezes a live value unattended.

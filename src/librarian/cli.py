@@ -460,7 +460,7 @@ def _verify_accept(cfg: Config, check_id: str, rep: Reporter) -> int:
         rep.say(f"  accepted: {check_id} expect -> {r.live!r} (generated-checks.json); check now PASSES.")
         rep.say("  You've intentionally changed what counts as correct. Commit to record it.")
         return 0
-    # 2.3: a hand-written .librarian.toml check. The zero-dep tool never writes the user's
+    # 2.3: a hand-written .librarian.toml check. The tool never rewrites the user's
     # TOML (config.py invariant), so NOTHING was changed — say so honestly and exit 1 rather
     # than returning a false success. The DRIFT is real until the human edits the expect.
     rep.say(f"  NO CHANGE MADE — {check_id} lives in .librarian.toml, which the tool never edits.")
@@ -671,7 +671,7 @@ def cmd_add_check(args, rep: Reporter) -> int:
         rep.warn("--expect is ignored for a track check (it baselines the value instead of pinning it)")
 
     if args.print_toml:
-        rep.say("\n  Paste into .librarian.toml (the tool never writes your TOML):\n")
+        rep.say("\n  Paste into .librarian.toml (yours to own — the tool never rewrites it):\n")
         rep.say(draft.to_toml())
         return done("printed", 0)
     if args.dry_run:
