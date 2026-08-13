@@ -60,6 +60,44 @@ def run(cfg: Config) -> DoctorReport:
     else:
         rep.warn(f"no {cfg.artifacts_file} — non-markdown artifacts are uncatalogued")
 
+    # `_index/` mixes DERIVED output (CATALOG.md, STALENESS.md, catalog.json — regenerable
+    # by `index`) with IRREPLACEABLE state (baselines, provenance, proposals, apply-log, and
+    # the machine-authored checks/artifacts). Committed, that's recoverable. Gitignored, a
+    # `rm -rf _index` destroys machine-authored work with no error and no way back — so the
+    # dangerous configuration is the one to name.
+    irreplaceable = [
+        f
+        for f in (
+            verify.BASELINES_FILE,
+            verify.PROVENANCE_FILE,
+            proposals.PROPOSALS_FILE,
+            proposals.GENERATED_CHECKS_FILE,
+            registry.GENERATED_FILE,
+        )
+        if (cfg.path(cfg.index_dir) / f).is_file()
+    ]
+    if irreplaceable and (cfg.root / ".git").exists():
+        try:
+            ignored = (
+                subprocess.run(
+                    ["git", "check-ignore", "-q", str(cfg.path(cfg.index_dir) / irreplaceable[0])],
+                    cwd=cfg.root,
+                    capture_output=True,
+                    timeout=10,
+                ).returncode
+                == 0
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            ignored = False
+        if ignored:
+            rep.problem(
+                f"{cfg.index_dir}/ is gitignored but holds irreplaceable state "
+                f"({', '.join(irreplaceable)}) — regenerating the index would destroy "
+                "machine-authored work with no way back. Commit these, or move them out."
+            )
+        else:
+            rep.ok(f"{cfg.index_dir}/ state is tracked ({len(irreplaceable)} irreplaceable file(s))")
+
     # Machine-emitted checks the loader dropped. Silence here is the dangerous case: the
     # agent is told the check was registered, and it never runs.
     for cid in cfg.shadowed_checks:

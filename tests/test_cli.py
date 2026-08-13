@@ -379,6 +379,17 @@ class CliTests(CliCase):
         self.assertEqual(code, 1)
         self.assertIn("malformed", out)
 
+    @unittest.skipUnless(shutil.which("git"), "needs git")
+    def test_doctor_flags_gitignored_irreplaceable_state(self):
+        subprocess.run(["git", "init", "-q", str(self.root)], check=True, capture_output=True)
+        self._generated_checks({"id": "c", "kind": "track", "doc": "d.md", "cmd": "echo 1"})
+        code, out, _ = self.run_sub("doctor")
+        self.assertIn("state is tracked", out)
+        self.write(".gitignore", "_index/\n")
+        code, out, _ = self.run_sub("doctor")
+        self.assertEqual(code, 1)
+        self.assertIn("gitignored but holds irreplaceable state", out)
+
     def test_doctor_counts_machine_authored_artifacts(self):
         # with no hand-authored TOML, doctor must not claim artifacts are uncatalogued
         self.write("queries/a.sql", "-- x\nSELECT 1;\n")
