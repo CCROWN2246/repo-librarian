@@ -58,6 +58,8 @@ READ_MATRIX = [
     ["apply", "--all"],
     ["apply", "--auto"],
     ["ingest"],
+    ["connect", "."],
+    ["add-check", "--dry-run", "--cmd", "echo 1", "--id", "probe", "--doc", "docs/a.md"],
 ]
 
 

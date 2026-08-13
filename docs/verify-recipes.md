@@ -5,6 +5,39 @@ point each check at a **one-line command that fetches the current truth**, and t
 documented value stops matching it. This guide is the copy-paste path from "I have some CSVs / a read-only
 database" to "my docs fail loud when they drift."
 
+## The fast path: let the tool write the check
+
+Before hand-authoring anything, try the two guided commands. They run your command **once**, show you
+the live value, and write the check for you — no TOML, no `extract` spec to memorize.
+
+```bash
+# One check, guided. Runs it, shows the value, asks before freezing it as "correct".
+$ librarian add-check data/shipments.csv --intent rows
+$ librarian add-check data/shipments.csv --intent schema --doc docs/data/shipments.md
+
+# A whole folder at once, drafted as proposals you review before they land.
+$ librarian connect data/
+$ librarian connect data/ --write        # then: librarian todos / librarian apply --only <id>
+```
+
+`--intent` is what to guard: `rows` (data-row count, `track`), `schema` (the header line, `assert` — any
+column added, removed, renamed, or reordered is DRIFT), `distinct:<column>`, or `length` for a JSON array.
+Use `--cmd '<anything>'` to wire a command of your own the same way.
+
+Two things worth knowing about how these behave:
+
+- **An `assert` never freezes a value behind your back.** `add-check` asks first (`--yes` to skip the
+  prompt, `--expect <value>` to state it yourself); `connect` files drafts as proposals so the review is
+  the gate. A frozen `expect` is a claim about the world, so a human signs it.
+- **They write to `_index/generated-checks.json`, not your config.** The tool never rewrites
+  `.librarian.toml` — it's yours, comments and all, and `tomllib` can't round-trip it — so generated
+  checks are self-contained `cmd` checks that need no
+  `[verify.sources]` entry. `librarian verify` merges them automatically. Want to own one by hand instead?
+  `librarian add-check ... --print-toml` prints the block for you to paste.
+
+The rest of this guide is the hand-authored path — for named reusable sources, databases, and APIs, which
+is where you'll still write TOML yourself.
+
 ## The mental model (two pieces)
 
 **A source** is a shell command that produces a value. It can be anything on your PATH — `sqlite3`, `psql`,
@@ -63,13 +96,15 @@ command = "sh -c '{arg}'"
 ```
 
 ```toml
-# Row count (kind=track — rows grow over time):
+# Row count (kind=track — rows grow over time).
+# NOTE: `wc -l` counts NEWLINES, so it silently under-reports by one when the file has no
+# trailing newline. `awk END{NR}` counts records instead — this is what `add-check` drafts.
 [[verify.checks]]
 id = "shipments_rowcount"
 kind = "track"
 doc = "docs/data/shipments.md"
 source = "csv"
-arg = "tail -n +2 data/shipments.csv | wc -l"
+arg = "awk 'END {print (NR > 0 ? NR - 1 : 0)}' data/shipments.csv"
 extract = "scalar"
 
 # Distinct customers (assert — the doc claims a specific number):
@@ -78,7 +113,7 @@ id = "distinct_customers"
 kind = "assert"
 doc = "docs/data/customers.md"
 source = "csv"
-arg = "tail -n +2 data/customers.csv | cut -d',' -f2 | sort -u | wc -l"
+arg = "awk -F',' 'NR > 1 {print $2}' data/customers.csv | sort -u | grep -c ."
 extract = "scalar"
 expect = "412"
 
@@ -91,6 +126,17 @@ source = "csv"
 arg = "head -1 data/customers.csv | tr ',' '\\n'"
 extract = "column_present:region"
 expect = "present"
+
+# Whole-header guard — catches ANY column added, removed, renamed, or reordered.
+# This is what `librarian add-check --intent schema` drafts.
+[[verify.checks]]
+id = "customers_schema"
+kind = "assert"
+doc = "docs/data/customers.md"
+source = "csv"
+arg = "head -n 1 data/customers.csv | tr -d '\\r'"
+extract = "scalar"
+expect = "customer_id,name,region,active"
 ```
 
 ### A read-only SQLite database

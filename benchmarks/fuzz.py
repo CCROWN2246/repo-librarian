@@ -62,6 +62,7 @@ MATRIX = [
     ["apply", "--all"],
     ["apply", "--auto"],
     ["ingest"],
+    ["connect", "."],
 ]
 
 

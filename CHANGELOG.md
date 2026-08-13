@@ -5,6 +5,36 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
+### Added — wiring `verify` to your data (pre-beta onboarding, V2 + V3)
+The verify *engine* could always point at any shell command, but reaching it meant hand-writing
+TOML and knowing the `extract` spec from a code docstring. Two commands close that gap:
+
+- **`librarian add-check`** — guided single wiring. Give it a data file and an intent
+  (`rows` | `schema` | `distinct:<column>` | `length`), or any `--cmd`. It runs the command **once**,
+  shows the live value, and writes the check. An `assert` seeds `expect` from that value only behind a
+  confirm gate (TTY prompt, `--yes`, or an explicit `--expect`) — freezing a value as "correct" is a
+  claim, so a human signs it; a `track` check just auto-baselines. `--print-toml` emits a hand-owned
+  block instead, `--dry-run` writes nothing.
+- **`librarian connect <dir>`** — the bulk story. Scans a folder of data files and drafts a check per
+  file (row count + a whole-header schema guard for CSV/TSV, array length for JSON), each probed live,
+  filed as reviewable `add_check` proposals through the existing propose→apply spine (`--write`;
+  `--approve` to make them `apply --all`-able). Files it can't draft for are **listed with a reason**
+  rather than silently omitted, and a probe failure is reported as a failure (exit 1), never a skip.
+
+Both write to the machine-owned `_index/generated-checks.json` as self-contained `cmd` checks, so they
+need no `[verify.sources]` entry and `.librarian.toml` is never rewritten (it's hand-authored and
+`tomllib` can't round-trip it without destroying comments). Both refuse an id already owned
+by hand-written TOML (human checks win on collision, so the wired check would silently never run).
+
+`doc` — the file named when a check drifts — is attributed to the one catalogued doc that cites the data
+file; when nothing cites it, the check falls back to the data file itself and **says so** rather than
+guessing. Override with `--doc`.
+
+### Fixed
+- **Row-count recipes under-counted by one.** `tail -n +2 <file> | wc -l` counts newlines, so a CSV whose
+  last line has no trailing newline lost a row. Drafted checks (and `docs/verify-recipes.md`) now use
+  `awk 'END {print (NR > 0 ? NR - 1 : 0)}'`, which counts records and floors an empty file at 0.
+
 ## [0.4.2] - 2026-07-17
 
 ### Fixed — semantic correctness (Phase B, Layer 3 adversarial agent sweep)

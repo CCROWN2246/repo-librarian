@@ -14,8 +14,14 @@ Then report:
   and **ERROR** (a check couldn't run) — one line each.
 - **SKIP** — checks whose source isn't connected yet; not a problem, they go green when it is.
 
-If there are **no checks configured**, say so and point to `[[verify.checks]]` in `.librarian.toml`: a
-high-value checkable fact should have one so it can never silently rot. (`/librarian-dream` and
-`/librarian-enrich` propose these for you.)
+If there are **no checks configured**, say so and offer the guided wiring — do NOT send them off to
+hand-write TOML:
+- `librarian connect <data-dir>` — drafts a check per data file (row count + schema guard) as proposals
+  they review, then `librarian apply`.
+- `librarian add-check <file> --intent rows|schema` — wires ONE check; it runs the command, shows the
+  live value, and asks before freezing it as the expected value.
+
+A high-value checkable fact should have a check so it can never silently rot. (`/librarian-dream` and
+`/librarian-enrich` also propose these for you.) Full guide: `docs/verify-recipes.md`.
 
 If everything passed, say so in one line.
