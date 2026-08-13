@@ -135,6 +135,40 @@ def rank(entries: list[dict], terms: list[str]) -> list[tuple[float, dict]]:
     return scored
 
 
+def routing_failures(
+    entries: list[dict], target_path: str, phrases: list[str]
+) -> list[tuple[str, str | None]]:
+    """Which proposed `read_when` phrases fail to route to `target_path`?
+
+    This is the falsifiability test for routing, and it exists because a drafted phrase is
+    otherwise the one piece of catalog metadata nothing can check. A wrong phrase is worse
+    than a missing one: missing makes a doc invisible (a false negative you notice), wrong
+    makes the WRONG doc rank first for a task phrase — the exact failure this tool exists to
+    prevent, and `read_when` outweighs every other field in `rank` (+10 vs +2 title).
+
+    Deterministic and zero-token: it re-uses the same pure ranker that serves the real query,
+    so "this phrase routes here" is verified by the mechanism it makes a claim about.
+
+    Returns ``[(phrase, winning_path)]`` for each phrase that does NOT rank the target first.
+    An empty list means every phrase routes where it claims to.
+    """
+    simulated = []
+    for e in entries:
+        entry = dict(e)
+        if str(entry.get("path", "")) == target_path:
+            entry["read_when"] = list(phrases)
+        simulated.append(entry)
+    if not any(str(e.get("path", "")) == target_path for e in simulated):
+        return []  # target isn't catalogued yet — nothing to rank against, don't block
+    failures: list[tuple[str, str | None]] = []
+    for phrase in phrases:
+        scored = rank(simulated, [phrase])
+        winner = str(scored[0][1].get("path", "")) if scored else None
+        if winner != target_path:
+            failures.append((phrase, winner))
+    return failures
+
+
 def rank_bodies(cfg: Config, entries: list[dict], terms: list[str]) -> list[tuple[float, dict]]:
     """Zero-hit fallback: rank by doc BODY text. Reads files in the entries'
     (path-sorted) order for determinism; skips unreadable ones. The caller must

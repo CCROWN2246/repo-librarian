@@ -1520,6 +1520,38 @@ def cmd_enrich(args, rep: Reporter) -> int:
     return 1
 
 
+def _routing_self_test(cfg: Config, built: list, rep: Reporter) -> list[str]:
+    """Reject drafted routing that sends a task phrase to the wrong doc.
+
+    The accuracy wall for `set_read_when`. Every other generative proposal type has one
+    (`enrich_create` needs source evidence, `add_check` needs a command that ran); routing
+    had none, and it is the highest-weighted field in retrieval. Here the evidence is the
+    ranker itself: a phrase must actually rank its own doc first, checked against the live
+    catalog with the same pure function that serves the real query.
+    """
+    routing = [p for p in built if p.type == "set_read_when"]
+    if not routing:
+        return []
+    data = _load_catalog_json(cfg)
+    if data is None:
+        rep.warn("no catalog.json — routing not self-tested; run `librarian index` first")
+        return []
+    entries = data.get("entries", [])
+    rejected = []
+    for p in routing:
+        target = p.targets[0].path
+        failures = search.routing_failures(entries, target, list(p.action.get("read_when", [])))
+        for phrase, winner in failures:
+            rep.error(
+                f"{p.id}: read_when {phrase!r} does not route to {target} — "
+                + (f"{winner} ranks first for it" if winner else "it matches nothing")
+                + ". A phrase that points at the wrong doc is worse than no phrase."
+            )
+        if failures:
+            rejected.append(p.id)
+    return rejected
+
+
 def cmd_propose(args, rep: Reporter) -> int:
     cfg = _resolve_config(args)
     if args.file == "-":
@@ -1544,6 +1576,14 @@ def cmd_propose(args, rep: Reporter) -> int:
     # work in todos/apply. Warn loudly. Applied state comes from the flag OR the apply-log.
     landed = existing_ids & apply_engine.applied_ids_from_log(cfg)
     built = [proposals.build_from_partial(cfg, pt, approved=args.approved) for pt in partials]
+    # Routing that points at the wrong doc is rejected before it can be stored: a bad
+    # read_when outranks every other field, so storing it would poison retrieval until
+    # someone noticed by hand.
+    rejected = _routing_self_test(cfg, built, rep)
+    if rejected:
+        built = [p for p in built if p.id not in rejected]
+        if not built:
+            return 2
     replaced = [p.id for p in built if p.id in existing_ids]
     reactivated = [
         p.id for p in built if p.id in landed or (existing_by_id.get(p.id) and existing_by_id[p.id].applied)

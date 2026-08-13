@@ -148,6 +148,50 @@ CONFLICT_DOC = (
 )
 
 
+class RoutingGateTests(CliCase):
+    """`propose` refuses routing that would send a task phrase to the wrong doc."""
+
+    def seed(self):
+        self.write(
+            "docs/etl.md",
+            make_doc(id="etl", title="ETL Pipeline", domain="data", read_when="run the etl pipeline"),
+        )
+        self.write("docs/billing.md", make_doc(id="billing", title="Billing Runbook", read_when=""))
+        self.run_sub("index")
+
+    def _propose(self, path, phrases):
+        payload = json.dumps(
+            {
+                "type": "set_read_when",
+                "targets": [{"path": path}],
+                "action": {"read_when": phrases},
+                "rationale": "routing",
+            }
+        )
+        self.write("p.json", payload)
+        return self.run_sub("propose", str(self.root / "p.json"))
+
+    def test_good_routing_is_stored(self):
+        self.seed()
+        code, _, _ = self._propose("docs/billing.md", ["reconcile an invoice"])
+        self.assertEqual(code, 0)
+        self.assertEqual(len(proposals.load(self.cfg())), 1)
+
+    def test_hijacking_another_docs_phrase_is_refused(self):
+        self.seed()
+        code, _, err = self._propose("docs/billing.md", ["run the etl pipeline"])
+        self.assertEqual(code, 2)
+        self.assertIn("does not route to", err)
+        self.assertIn("docs/etl.md ranks first", err)
+        self.assertEqual(proposals.load(self.cfg()), [])  # never stored
+
+    def test_no_catalog_warns_but_does_not_block(self):
+        self.write("docs/billing.md", make_doc(id="billing", read_when=""))
+        code, _, err = self._propose("docs/billing.md", ["reconcile an invoice"])
+        self.assertEqual(code, 0)
+        self.assertIn("not self-tested", err)
+
+
 class ApplyCliTests(CliCase):
     def _seed_proposal(self, approved=True):
         self.write("docs/schema.md", CONFLICT_DOC)
