@@ -9,6 +9,7 @@ registry-as-Python-import design).
 
 from __future__ import annotations
 
+import json
 import tomllib
 
 from .config import Config, ConfigError
@@ -16,12 +17,65 @@ from .config import Config, ConfigError
 REQUIRED = ("path", "id", "title", "domain", "kind", "status")
 OPTIONAL = ("last_verified", "recheck", "read_when", "tags", "desc", "source_of_truth", "authority", "owner")
 
+# Machine-authored artifact metadata, keyed by path. This is how the librarian indexes a
+# file that cannot carry frontmatter (SQL, CSV, notebooks) — the class that most needs
+# machine-written routing and, before this existed, was the one class where it was
+# structurally impossible (`set_read_when` could only touch frontmatter, so every artifact
+# proposal returned STALE and the dream agent re-proposed it forever).
+GENERATED_FILE = "generated-artifacts.json"
+
+
+def load_generated(cfg: Config) -> list[dict]:
+    """Machine-authored artifact entries/overlays. Tolerant: a corrupt sidecar must not
+    brick every command that reads the registry (mirrors the generated-checks loader)."""
+    path = cfg.path(cfg.index_dir) / GENERATED_FILE
+    if not path.is_file():
+        return []
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return []
+    if not isinstance(data, list):
+        return []
+    return [e for e in data if isinstance(e, dict) and isinstance(e.get("path"), str) and e.get("path")]
+
+
+def save_generated(cfg: Config, entries: list[dict]) -> None:
+    out = cfg.path(cfg.index_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    payload = sorted(entries, key=lambda e: str(e.get("path", "")))
+    (out / GENERATED_FILE).write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def upsert_generated(cfg: Config, path: str, fields: dict) -> None:
+    """Merge `fields` into the machine overlay for `path` (create it if absent)."""
+    entries = load_generated(cfg)
+    for e in entries:
+        if e.get("path") == path:
+            e.update(fields)
+            break
+    else:
+        entries.append({"path": path, **fields})
+    save_generated(cfg, entries)
+
+
+def _is_empty(value) -> bool:
+    """A field the human left for the machine to fill: absent, blank, or a TODO placeholder."""
+    if value is None or value == "" or value == []:
+        return True
+    if isinstance(value, list):
+        return all(not str(x).strip() or "todo" in str(x).lower() for x in value)
+    return "todo" in str(value).lower()
+
 
 def load(cfg: Config) -> tuple[list[dict], list[str]]:
     """Return (artifacts, errors). Valid entries load even when siblings are broken."""
     path = cfg.path(cfg.artifacts_file)
     if not path.is_file():
-        return [], []
+        # No hand-authored registry is the AI-indexes-everything case, not the empty case:
+        # machine-authored entries must still load, or a repo where the human never wrote
+        # TOML would have no artifacts at all.
+        return _merge_generated(cfg, [], set())
     try:
         with open(path, "rb") as f:
             data = tomllib.load(f)
@@ -52,6 +106,46 @@ def load(cfg: Config) -> tuple[list[dict], list[str]]:
         seen_ids.add(e["id"])
         seen_paths.add(e["path"])
         artifacts.append(dict(e))
+
+    artifacts, gen_errors = _merge_generated(cfg, artifacts, seen_ids)
+    return artifacts, errors + gen_errors
+
+
+def _merge_generated(cfg: Config, artifacts: list[dict], seen_ids: set[str]) -> tuple[list[dict], list[str]]:
+    """Layer machine-authored metadata over the hand-authored registry.
+
+    One rule, both cases: **the machine fills gaps and never overwrites human intent.**
+    - An overlay for a path that HAS an `[[artifact]]` entry fills only the fields the human
+      left empty or marked TODO (`read_when = []  # TODO` is the canonical case).
+    - An overlay for a path with no entry stands alone, and must carry the required fields.
+
+    That rule is why this can't silently shadow anything: a human value always wins, so
+    there is no precedence surprise to diagnose later.
+    """
+    by_path = {a["path"]: a for a in artifacts}
+    errors: list[str] = []
+    for gen in load_generated(cfg):
+        path = gen["path"]
+        fields = {k: v for k, v in gen.items() if k != "path"}
+        existing = by_path.get(path)
+        if existing is not None:
+            filled = [k for k, v in fields.items() if k in REQUIRED + OPTIONAL and _is_empty(existing.get(k))]
+            for k in filled:
+                existing[k] = fields[k]
+            if filled:
+                existing["_generated_fields"] = sorted(set(existing.get("_generated_fields", []) + filled))
+            continue
+        entry = {"path": path, **fields}
+        problems = [f"missing {k!r}" for k in REQUIRED if k not in entry]
+        if entry.get("id") in seen_ids:
+            problems.append(f"duplicate id {entry.get('id')!r}")
+        if problems:
+            errors.append(f"{GENERATED_FILE} (path={path}): " + "; ".join(problems))
+            continue
+        seen_ids.add(entry["id"])
+        entry["_generated_fields"] = sorted(k for k in fields if k in REQUIRED + OPTIONAL)
+        artifacts.append(entry)
+        by_path[path] = entry
     return artifacts, errors
 
 

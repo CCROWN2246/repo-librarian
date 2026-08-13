@@ -139,6 +139,120 @@ class SetReadWhenTests(ApplyCase):
         self.assertEqual(self.apply(p2).result, ap.NOOP)
 
 
+class ArtifactRoutingTests(ApplyCase):
+    """REGRESSION: routing an artifact used to be structurally impossible.
+
+    `_apply_set_read_when` was frontmatter-only, so every non-doc target returned
+    STALE("re-dream") — and dream's read_when_todos bucket feeds it artifacts, so the
+    agent regenerated the identical proposal forever. SQL/CSV/notebooks are exactly the
+    files that cannot carry frontmatter, i.e. the ones the registry exists for.
+    """
+
+    def seed_artifact(self):
+        self.write("queries/active.sql", "-- Active customers\nSELECT 1;\n")
+        self.write(
+            "librarian-artifacts.toml",
+            '[[artifact]]\npath = "queries/active.sql"\nid = "active-sql"\n'
+            'title = "Active customers"\ndomain = "data"\nkind = "sql"\nstatus = "reference"\n'
+            "read_when = []\n",
+        )
+
+    def test_set_read_when_on_a_sql_artifact_applies(self):
+        self.seed_artifact()
+        p = proposals.make(
+            "set_read_when", [self.target("queries/active.sql")], {"read_when": ["find active customers"]}
+        )
+        outcome = self.apply(p)
+        self.assertEqual(outcome.result, ap.APPLIED, f"regressed to {outcome.result}: {outcome.detail}")
+        from librarian import registry
+
+        self.assertEqual(registry.load_generated(self.cfg())[0]["read_when"], ["find active customers"])
+
+    def test_reapply_is_noop_not_an_infinite_loop(self):
+        self.seed_artifact()
+        action = {"read_when": ["find active customers"]}
+        self.assertEqual(
+            self.apply(proposals.make("set_read_when", [self.target("queries/active.sql")], action)).result,
+            ap.APPLIED,
+        )
+        self.assertEqual(
+            self.apply(proposals.make("set_read_when", [self.target("queries/active.sql")], action)).result,
+            ap.NOOP,
+        )
+
+    def test_routing_reaches_the_catalog(self):
+        self.seed_artifact()
+        p = proposals.make(
+            "set_read_when", [self.target("queries/active.sql")], {"read_when": ["find active customers"]}
+        )
+        self.apply(p)
+        from librarian import registry
+
+        arts, errors = registry.load(self.cfg())
+        self.assertEqual(errors, [])
+        entry = next(a for a in arts if a["path"] == "queries/active.sql")
+        self.assertEqual(entry["read_when"], ["find active customers"])
+        self.assertEqual(entry["_generated_fields"], ["read_when"])
+
+    def test_machine_never_overwrites_a_human_value(self):
+        # the one precedence rule: the overlay fills gaps, human intent always wins
+        self.write("queries/active.sql", "-- x\nSELECT 1;\n")
+        self.write(
+            "librarian-artifacts.toml",
+            '[[artifact]]\npath = "queries/active.sql"\nid = "active-sql"\n'
+            'title = "Active customers"\ndomain = "data"\nkind = "sql"\nstatus = "reference"\n'
+            'read_when = ["the human wrote this"]\n',
+        )
+        from librarian import registry
+
+        registry.upsert_generated(self.cfg(), "queries/active.sql", {"read_when": ["machine guess"]})
+        entry = next(a for a in registry.load(self.cfg())[0] if a["path"] == "queries/active.sql")
+        self.assertEqual(entry["read_when"], ["the human wrote this"])
+        self.assertNotIn("_generated_fields", entry)
+
+    def test_todo_placeholder_counts_as_a_gap(self):
+        # `read_when = []  # TODO` is what `suggest --write` emits; the machine may fill it
+        self.write("queries/active.sql", "-- x\nSELECT 1;\n")
+        self.write(
+            "librarian-artifacts.toml",
+            '[[artifact]]\npath = "queries/active.sql"\nid = "active-sql"\n'
+            'title = "Active customers"\ndomain = "data"\nkind = "sql"\nstatus = "reference"\n'
+            'read_when = ["TODO: task phrases"]\n',
+        )
+        from librarian import registry
+
+        registry.upsert_generated(self.cfg(), "queries/active.sql", {"read_when": ["real phrase"]})
+        entry = next(a for a in registry.load(self.cfg())[0] if a["path"] == "queries/active.sql")
+        self.assertEqual(entry["read_when"], ["real phrase"])
+
+    def test_unknown_target_fails_loud(self):
+        p = proposals.make("set_read_when", [self.target("queries/ghost.sql")], {"read_when": ["x"]})
+        self.assertEqual(self.apply(p).result, ap.STALE)
+
+    def test_standalone_overlay_needs_required_fields(self):
+        from librarian import registry
+
+        registry.upsert_generated(self.cfg(), "queries/orphan.sql", {"read_when": ["x"]})
+        _, errors = registry.load(self.cfg())
+        self.assertTrue(any("missing" in e for e in errors), errors)
+
+    def test_corrupt_sidecar_does_not_brick_the_registry(self):
+        self.write("_index/generated-artifacts.json", "{ not json")
+        from librarian import registry
+
+        self.assertEqual(registry.load_generated(self.cfg()), [])
+        self.assertEqual(registry.load(self.cfg()), ([], []))
+
+    def test_doc_target_still_uses_frontmatter(self):
+        self.write("d.md", make_doc(read_when=""))
+        p = proposals.make("set_read_when", [self.target("d.md")], {"read_when": ["a phrase"]})
+        self.assertEqual(self.apply(p).result, ap.APPLIED)
+        from librarian import frontmatter, registry
+
+        self.assertEqual(frontmatter.parse(self.read("d.md")).meta["read_when"], ["a phrase"])
+        self.assertEqual(registry.load_generated(self.cfg()), [])
+
+
 class ArchiveTests(ApplyCase):
     def test_archive_moves_and_flips_status(self):
         self.write("docs/old.md", make_doc(status="draft"))

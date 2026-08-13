@@ -154,19 +154,44 @@ def _apply_ack(cfg: Config, p: proposals.Proposal, dry: bool) -> tuple[str, str]
 
 
 def _apply_set_read_when(cfg: Config, p: proposals.Proposal, dry: bool) -> tuple[str, str]:
+    """Write routing phrases onto a doc (frontmatter) or an artifact (machine overlay).
+
+    Artifacts are the whole point of the second branch. SQL, CSV, and notebooks cannot carry
+    frontmatter — which is exactly why the registry exists — so before the overlay store this
+    returned STALE("re-dream") for every one of them, and the dream agent, told to re-dream,
+    regenerated the identical proposal forever. The class of file that most needs machine-written
+    routing was the one class where it was impossible.
+    """
     tgt = p.targets[0]
+    rw = list(p.action.get("read_when", []))
+    if not tgt.path.endswith(".md"):
+        return _set_artifact_read_when(cfg, tgt.path, rw, dry)
     path = cfg.path(tgt.path)
     text = _read(cfg, tgt.path)
-    rw = list(p.action.get("read_when", []))
     parsed = frontmatter.parse(text)
     if parsed is None:
-        return STALE, "no frontmatter block; re-dream"
+        return STALE, "no frontmatter block; run `librarian backfill` to stamp one first"
     if parsed.meta.get("read_when") == rw:
         return NOOP, "read_when already set"
     newtext = frontmatter.set_field(text, "read_when", rw)
     if not dry:
         path.write_text(newtext, encoding="utf-8")
     return APPLIED, f"set read_when ({len(rw)} phrase(s))"
+
+
+def _set_artifact_read_when(cfg: Config, rel: str, rw: list[str], dry: bool) -> tuple[str, str]:
+    """Routing for a non-doc artifact, into the machine-owned overlay."""
+    from . import registry
+
+    known = {a["path"] for a in registry.load(cfg)[0]}
+    if rel not in known and not cfg.path(rel).exists():
+        return STALE, f"{rel} is neither a registered artifact nor a file on disk"
+    for entry in registry.load_generated(cfg):
+        if entry.get("path") == rel and entry.get("read_when") == rw:
+            return NOOP, "read_when already set"
+    if not dry:
+        registry.upsert_generated(cfg, rel, {"read_when": rw})
+    return APPLIED, f"set read_when ({len(rw)} phrase(s)) in {registry.GENERATED_FILE}"
 
 
 def _apply_resolve_absence(cfg: Config, p: proposals.Proposal, dry: bool) -> tuple[str, str]:
