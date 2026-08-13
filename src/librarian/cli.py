@@ -239,6 +239,12 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--tag", help="filter to entries carrying this tag")
     sp.add_argument("--id", dest="id_exact", help="filter to this exact id")
     sp.add_argument("--path", dest="path_sub", help="filter to entries whose path contains this substring")
+    sp.add_argument("--kind", help="filter to this kind (doc, sql, csv, notebook, script, …)")
+    sp.add_argument(
+        "--count",
+        action="store_true",
+        help="report how many entries match (with a per-kind breakdown) instead of listing them",
+    )
     sp.add_argument("-n", type=int, default=50, help="max results (default 50)")
 
     sp = sub.add_parser("why", help="show the provenance for a verified fact (command, source, value, when)")
@@ -1324,9 +1330,12 @@ def cmd_query(args, rep: Reporter) -> int:
     stale_ids = {s.get("id") for s in data.get("flags", {}).get("stale", [])}
     terms = [t.lower() for t in args.terms]
     dom = args.domain.lower() if args.domain else None
+    kind = args.kind.lower() if args.kind else None
     out = []
     for e in data.get("entries", []):
         if dom and str(e.get("domain", "")).lower() != dom:
+            continue
+        if kind and str(e.get("kind", "")).lower() != kind:
             continue
         if args.status and str(e.get("status", "")) != args.status:
             continue
@@ -1351,6 +1360,23 @@ def cmd_query(args, rep: Reporter) -> int:
         out.append(e)
     out.sort(key=lambda e: str(e.get("path", "")))
     total = len(out)  # total matches BEFORE the -n cap, so a consumer can detect truncation
+
+    if args.count:
+        # "how many files of this type do we have?" — answered off the catalog, uncapped by
+        # -n (a count that silently stopped at the display cap would be a wrong number, which
+        # is the one thing this tool exists to prevent).
+        by_kind: dict[str, int] = {}
+        for e in out:
+            by_kind[str(e.get("kind") or "?")] = by_kind.get(str(e.get("kind") or "?"), 0) + 1
+        by_kind = dict(sorted(by_kind.items()))
+        if args.json:
+            rep.emit_json({"count": total, "by_kind": by_kind})
+        else:
+            rep.say(f"  {total} matching entr{'y' if total == 1 else 'ies'}")
+            for k, n in by_kind.items():
+                rep.say(f"    {k:12} {n}")
+        return 0 if total else 1
+
     out = out[: args.n]
     rows = [
         {

@@ -44,6 +44,56 @@ class QueryTests(CliCase):
         # pointer + freshness, not bodies
         self.assertEqual(set(data["results"][0]) >= {"path", "status", "last_verified", "stale"}, True)
 
+    def seed_mixed(self):
+        """Docs plus registered artifacts — the corpus the north-star questions ask about."""
+        self.seed()
+        self.write("queries/active.sql", "-- Active customers\nSELECT 1;\n")
+        self.write("queries/rollup.sql", "-- Monthly rollup\nSELECT 2;\n")
+        self.write("data/stations.csv", "id,name\n1,a\n")
+        self.run_sub("suggest", "--write")
+        self.run_sub("index")
+
+    def test_kind_filter(self):
+        # "where would I find this kind of code?"
+        self.seed_mixed()
+        code, out, _ = self.run_sub("query", "--kind", "sql", "--json")
+        self.assertEqual(code, 0)
+        data = json.loads(out)
+        self.assertEqual({r["path"] for r in data["results"]}, {"queries/active.sql", "queries/rollup.sql"})
+
+    def test_kind_filter_is_case_insensitive(self):
+        self.seed_mixed()
+        self.assertEqual(json.loads(self.run_sub("query", "--kind", "SQL", "--json")[1])["count"], 2)
+
+    def test_count_reports_totals_by_kind(self):
+        # "how many files of this type do we have?"
+        self.seed_mixed()
+        code, out, _ = self.run_sub("query", "--count", "--json")
+        self.assertEqual(code, 0)
+        data = json.loads(out)
+        self.assertEqual(data["by_kind"]["sql"], 2)
+        self.assertEqual(data["by_kind"]["csv"], 1)
+        self.assertEqual(data["by_kind"]["doc"], 2)
+        self.assertEqual(data["count"], sum(data["by_kind"].values()))
+
+    def test_count_ignores_the_display_cap(self):
+        # a count that silently stopped at -n would be a WRONG NUMBER, which is the one
+        # thing this tool exists to prevent
+        self.seed_mixed()
+        data = json.loads(self.run_sub("query", "--count", "--json", "-n", "1")[1])
+        self.assertEqual(data["count"], 5)
+
+    def test_count_respects_other_filters(self):
+        self.seed_mixed()
+        data = json.loads(self.run_sub("query", "--kind", "sql", "--count", "--json")[1])
+        self.assertEqual(data, {"count": 2, "by_kind": {"sql": 2}})
+
+    def test_count_zero_exits_1(self):
+        self.seed_mixed()
+        code, out, _ = self.run_sub("query", "--kind", "parquet", "--count", "--json")
+        self.assertEqual(code, 1)
+        self.assertEqual(json.loads(out), {"count": 0, "by_kind": {}})
+
     def test_terms_require_all_present(self):
         self.seed()
         code, out, _ = self.run_sub("query", "runbook", "--json")
