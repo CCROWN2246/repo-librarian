@@ -8,7 +8,7 @@ import subprocess
 import sys
 from dataclasses import dataclass, field
 
-from . import catalog, config, registry, verify
+from . import catalog, checks, config, proposals, registry, verify
 from .config import Config
 
 
@@ -48,15 +48,88 @@ def run(cfg: Config) -> DoctorReport:
     if stale:
         rep.warn(stale)
 
-    # Registry
-    if cfg.path(cfg.artifacts_file).is_file():
-        arts, errors = registry.load(cfg)
-        if errors:
-            for e in errors:
-                rep.problem(e)
-        rep.ok(f"artifact registry: {len(arts)} valid entr{'y' if len(arts) == 1 else 'ies'}")
+    # Registry (hand-authored TOML + the machine-authored overlay)
+    arts, errors = registry.load(cfg)
+    generated = registry.load_generated(cfg)
+    for e in errors:
+        rep.problem(e)
+    if cfg.path(cfg.artifacts_file).is_file() or generated:
+        machine = sum(1 for a in arts if a.get("_generated_fields"))
+        detail = f" ({machine} carrying machine-authored fields)" if machine else ""
+        rep.ok(f"artifact registry: {len(arts)} valid entr{'y' if len(arts) == 1 else 'ies'}{detail}")
     else:
         rep.warn(f"no {cfg.artifacts_file} — non-markdown artifacts are uncatalogued")
+
+    # `_index/` mixes DERIVED output (CATALOG.md, STALENESS.md, catalog.json — regenerable
+    # by `index`) with IRREPLACEABLE state (baselines, provenance, proposals, apply-log, and
+    # the machine-authored checks/artifacts). Committed, that's recoverable. Gitignored, a
+    # `rm -rf _index` destroys machine-authored work with no error and no way back — so the
+    # dangerous configuration is the one to name.
+    irreplaceable = [
+        f
+        for f in (
+            verify.BASELINES_FILE,
+            verify.PROVENANCE_FILE,
+            proposals.PROPOSALS_FILE,
+            proposals.GENERATED_CHECKS_FILE,
+            registry.GENERATED_FILE,
+        )
+        if (cfg.path(cfg.index_dir) / f).is_file()
+    ]
+    if irreplaceable and (cfg.root / ".git").exists():
+        try:
+            ignored = (
+                subprocess.run(
+                    ["git", "check-ignore", "-q", str(cfg.path(cfg.index_dir) / irreplaceable[0])],
+                    cwd=cfg.root,
+                    capture_output=True,
+                    timeout=10,
+                ).returncode
+                == 0
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            ignored = False
+        if ignored:
+            rep.problem(
+                f"{cfg.index_dir}/ is gitignored but holds irreplaceable state "
+                f"({', '.join(irreplaceable)}) — regenerating the index would destroy "
+                "machine-authored work with no way back. Commit these, or move them out."
+            )
+        else:
+            rep.ok(f"{cfg.index_dir}/ state is tracked ({len(irreplaceable)} irreplaceable file(s))")
+
+    # V4: data files no verify check guards. The doc-side coverage scan has always nudged
+    # about an unchecked claim; this is its data-side twin, and it is also the only thing
+    # that surfaces `connect` — without it you have to already know the command exists.
+    # Lives in doctor, not the status hook: it walks the filesystem, and the hook is
+    # deliberately catalog-only so it stays cheap enough to run on every prompt.
+    guarded = " ".join((c.cmd or "") + " " + (c.arg or "") for c in cfg.checks)
+    try:
+        draftable, _skipped = checks.scan(cfg, ".")
+    except OSError:
+        draftable = []
+    unguarded = [rel for rel in draftable if rel not in guarded]
+    if unguarded:
+        shown = ", ".join(unguarded[:3]) + (f", +{len(unguarded) - 3} more" if len(unguarded) > 3 else "")
+        rep.warn(
+            f"{len(unguarded)} data file(s) no verify check guards ({shown}) — "
+            "`librarian connect <dir>` drafts a row-count and schema guard for each"
+        )
+    elif draftable:
+        rep.ok(f"data coverage: all {len(draftable)} scannable data file(s) are guarded by a check")
+
+    # Machine-emitted checks the loader dropped. Silence here is the dangerous case: the
+    # agent is told the check was registered, and it never runs.
+    for cid in cfg.shadowed_checks:
+        rep.problem(
+            f"generated check {cid!r} is SHADOWED by a hand-written check of the same id in "
+            f"{config.CONFIG_NAME} — the generated one never runs. Rename one of them."
+        )
+    for cid in cfg.invalid_generated_checks:
+        rep.problem(
+            f"generated check {cid!r} in {proposals.GENERATED_CHECKS_FILE} is malformed and was "
+            "skipped (needs id, kind, exactly one of cmd/arg, and expect for assert)"
+        )
 
     # Git hook wiring
     if (cfg.root / ".git").exists():

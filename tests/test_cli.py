@@ -354,6 +354,65 @@ class CliTests(CliCase):
         self.assertIn(code, (0, 1))
         self.assertIn("[OK]", out)
 
+    def _generated_checks(self, *checks):
+        self.write("_index/generated-checks.json", json.dumps({"checks": list(checks)}))
+
+    def test_doctor_reports_a_shadowed_generated_check(self):
+        # the worst failure this design can have: apply says "registered", the check
+        # never runs, and nothing diagnoses it
+        self.write(
+            ".librarian.toml",
+            'schema_version = 1\n\n[[verify.checks]]\nid = "dup"\nkind = "assert"\n'
+            'doc = "docs/a.md"\ncmd = "echo 1"\nexpect = "1"\n',
+        )
+        self._generated_checks(
+            {"id": "dup", "kind": "assert", "doc": "docs/a.md", "cmd": "echo 99", "expect": "99"}
+        )
+        code, out, _ = self.run_sub("doctor")
+        self.assertEqual(code, 1)
+        self.assertIn("SHADOWED", out)
+        self.assertIn("dup", out)
+
+    def test_doctor_reports_a_malformed_generated_check(self):
+        self._generated_checks({"id": "broken", "kind": "nonsense"})
+        code, out, _ = self.run_sub("doctor")
+        self.assertEqual(code, 1)
+        self.assertIn("malformed", out)
+
+    @unittest.skipUnless(shutil.which("git"), "needs git")
+    def test_doctor_flags_gitignored_irreplaceable_state(self):
+        subprocess.run(["git", "init", "-q", str(self.root)], check=True, capture_output=True)
+        self._generated_checks({"id": "c", "kind": "track", "doc": "d.md", "cmd": "echo 1"})
+        code, out, _ = self.run_sub("doctor")
+        self.assertIn("state is tracked", out)
+        self.write(".gitignore", "_index/\n")
+        code, out, _ = self.run_sub("doctor")
+        self.assertEqual(code, 1)
+        self.assertIn("gitignored but holds irreplaceable state", out)
+
+    def test_doctor_counts_machine_authored_artifacts(self):
+        # with no hand-authored TOML, doctor must not claim artifacts are uncatalogued
+        self.write("queries/a.sql", "-- x\nSELECT 1;\n")
+        self.write(
+            "_index/generated-artifacts.json",
+            json.dumps(
+                [
+                    {
+                        "path": "queries/a.sql",
+                        "id": "a-sql",
+                        "title": "A",
+                        "domain": "data",
+                        "kind": "sql",
+                        "status": "reference",
+                        "read_when": ["find a"],
+                    }
+                ]
+            ),
+        )
+        code, out, _ = self.run_sub("doctor")
+        self.assertIn("artifact registry: 1 valid entry", out)
+        self.assertNotIn("uncatalogued", out)
+
 
 @unittest.skipUnless(shutil.which("git"), "needs git")
 class InitCommitTests(unittest.TestCase):

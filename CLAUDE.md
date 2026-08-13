@@ -23,7 +23,10 @@ positioning (measured, in `benchmarks/RESULTS.md`): it is a **correctness layer,
 - `config.py` — `.librarian.toml` load + strict validation (unknown key = error); the `Config` dataclass is the single source of policy (no module-constant policy).
 - `frontmatter.py` — the minimal-YAML parser (warns, never silently drops); `set_field` is format-preserving.
 - `catalog.py` (pure engine: `(config, today, artifacts) → CatalogResult`) + `render.py` (writes the 3 outputs; **STALENESS.md line 3 is a compatibility surface** — don't reorder its phrases) + `scanner.py`.
-- `registry.py` — `librarian-artifacts.toml` loader with per-entry validation.
+- `registry.py` — `librarian-artifacts.toml` loader with per-entry validation, **plus the
+  machine-authored overlay** (`_index/generated-artifacts.json`). One merge rule: the machine fills
+  gaps, never overwrites human intent. This is how files that can't carry frontmatter get indexed
+  by the AI; a repo with no registry TOML at all is fully machine-indexable.
 - `verify.py` + `extractors.py` — command-runner checks; exit-3 = SKIP contract; baselines in `_index/baselines.json`.
 - `checks.py` — the verify-onboarding drafter behind `add-check`/`connect`: per-filetype check templates,
   live `probe()`, doc attribution. Drafts are self-contained `cmd` checks into `generated-checks.json`

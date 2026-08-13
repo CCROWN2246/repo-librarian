@@ -4,7 +4,14 @@
 schema_version = 1
 
 [paths]
-# index    = "_index"                      # generated: CATALOG.md, STALENESS.md, catalog.json, baselines.json
+# index    = "_index"                      # holds BOTH derived output and irreplaceable state:
+#                                          #   derived (regenerate any time with `librarian index`):
+#                                          #     CATALOG.md, STALENESS.md, catalog.json
+#                                          #   irreplaceable (COMMIT THESE — `index` cannot rebuild them):
+#                                          #     baselines.json, provenance.json, proposals.json,
+#                                          #     apply-log.jsonl, generated-checks.json,
+#                                          #     generated-artifacts.json
+#                                          # Gitignoring _index/ makes a `rm -rf` unrecoverable; `doctor` flags it.
 # inbox    = "_inbox"                      # raw uploads awaiting intake
 # archive  = "_archive"                    # retired docs (excluded from the catalog)
 # docs     = "."                           # where knowledge docs are scanned from (relative to repo root)

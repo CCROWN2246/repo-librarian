@@ -228,6 +228,12 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="stamp the current worklist as reviewed (resets the 'dream is due' nudge)",
     )
+    sp.add_argument(
+        "--report",
+        action="store_true",
+        help=f"write the worklist to {{index}}/{dream.REPORT_FILE} for an unattended (cron) run; "
+        "the next session's greeting says a report is waiting",
+    )
 
     sp = sub.add_parser(
         "query", help="retrieve catalog pointers (id/path/freshness) by filter — pure stdlib, no bodies"
@@ -239,6 +245,12 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--tag", help="filter to entries carrying this tag")
     sp.add_argument("--id", dest="id_exact", help="filter to this exact id")
     sp.add_argument("--path", dest="path_sub", help="filter to entries whose path contains this substring")
+    sp.add_argument("--kind", help="filter to this kind (doc, sql, csv, notebook, script, …)")
+    sp.add_argument(
+        "--count",
+        action="store_true",
+        help="report how many entries match (with a per-kind breakdown) instead of listing them",
+    )
     sp.add_argument("-n", type=int, default=50, help="max results (default 50)")
 
     sp = sub.add_parser("why", help="show the provenance for a verified fact (command, source, value, when)")
@@ -883,6 +895,11 @@ def cmd_status(args, rep: Reporter) -> int:
     dream_due, _dream_reason = dream.is_due(cfg, dream_wl)
     if dream_due:
         attention.append(f"{dream_wl.total} maintenance item(s) ready — run /librarian-dream")
+    # An unattended `dream --report` run left a worklist waiting. Distinct from the live
+    # dream-due nudge: this one says the work was already computed while you were away.
+    # File existence only — the hook stays catalog-cheap, no filesystem walk.
+    if (cfg.path(cfg.index_dir) / dream.REPORT_FILE).is_file():
+        attention.append(f"a dream report is waiting — {cfg.index_dir}/{dream.REPORT_FILE}")
     # SYS: a scaffold written by an older librarian silently persists stale protocol/glue
     # (the whole stale-scaffold false-feedback class). Surface the upgrade nudge.
     scaffold_nudge = scaffold.scaffold_staleness(cfg)
@@ -1263,9 +1280,22 @@ def cmd_dream(args, rep: Reporter) -> int:
     wl.failing_checks = verify.failing_checks(cfg)
     if args.mark_done:
         dream.mark_done(cfg, wl)
+        # The report has served its purpose once the worklist is reviewed; leaving it would
+        # make the greeting nag about a report the human already acted on.
+        (cfg.path(cfg.index_dir) / dream.REPORT_FILE).unlink(missing_ok=True)
         rep.say(f"marked {wl.total} worklist item(s) reviewed — the dream nudge is reset.")
         return 0
     due, reason = dream.is_due(cfg, wl)
+    if args.report:
+        out = cfg.path(cfg.index_dir)
+        out.mkdir(parents=True, exist_ok=True)
+        (out / dream.REPORT_FILE).write_text(
+            dream.render_report(wl, config.today(), due, reason), encoding="utf-8"
+        )
+        rep.say(
+            f"wrote {cfg.index_dir}/{dream.REPORT_FILE} ({wl.total} item(s), {'due' if due else 'not due'})"
+        )
+        return 1 if due else 0
     if args.json:
         rep.emit_json({"due": due, "reason": reason, "worklist": wl.to_dict()})
         return 1 if due else 0
@@ -1324,9 +1354,12 @@ def cmd_query(args, rep: Reporter) -> int:
     stale_ids = {s.get("id") for s in data.get("flags", {}).get("stale", [])}
     terms = [t.lower() for t in args.terms]
     dom = args.domain.lower() if args.domain else None
+    kind = args.kind.lower() if args.kind else None
     out = []
     for e in data.get("entries", []):
         if dom and str(e.get("domain", "")).lower() != dom:
+            continue
+        if kind and str(e.get("kind", "")).lower() != kind:
             continue
         if args.status and str(e.get("status", "")) != args.status:
             continue
@@ -1351,6 +1384,23 @@ def cmd_query(args, rep: Reporter) -> int:
         out.append(e)
     out.sort(key=lambda e: str(e.get("path", "")))
     total = len(out)  # total matches BEFORE the -n cap, so a consumer can detect truncation
+
+    if args.count:
+        # "how many files of this type do we have?" — answered off the catalog, uncapped by
+        # -n (a count that silently stopped at the display cap would be a wrong number, which
+        # is the one thing this tool exists to prevent).
+        by_kind: dict[str, int] = {}
+        for e in out:
+            by_kind[str(e.get("kind") or "?")] = by_kind.get(str(e.get("kind") or "?"), 0) + 1
+        by_kind = dict(sorted(by_kind.items()))
+        if args.json:
+            rep.emit_json({"count": total, "by_kind": by_kind})
+        else:
+            rep.say(f"  {total} matching entr{'y' if total == 1 else 'ies'}")
+            for k, n in by_kind.items():
+                rep.say(f"    {k:12} {n}")
+        return 0 if total else 1
+
     out = out[: args.n]
     rows = [
         {
@@ -1494,6 +1544,38 @@ def cmd_enrich(args, rep: Reporter) -> int:
     return 1
 
 
+def _routing_self_test(cfg: Config, built: list, rep: Reporter) -> list[str]:
+    """Reject drafted routing that sends a task phrase to the wrong doc.
+
+    The accuracy wall for `set_read_when`. Every other generative proposal type has one
+    (`enrich_create` needs source evidence, `add_check` needs a command that ran); routing
+    had none, and it is the highest-weighted field in retrieval. Here the evidence is the
+    ranker itself: a phrase must actually rank its own doc first, checked against the live
+    catalog with the same pure function that serves the real query.
+    """
+    routing = [p for p in built if p.type == "set_read_when"]
+    if not routing:
+        return []
+    data = _load_catalog_json(cfg)
+    if data is None:
+        rep.warn("no catalog.json — routing not self-tested; run `librarian index` first")
+        return []
+    entries = data.get("entries", [])
+    rejected = []
+    for p in routing:
+        target = p.targets[0].path
+        failures = search.routing_failures(entries, target, list(p.action.get("read_when", [])))
+        for phrase, winner in failures:
+            rep.error(
+                f"{p.id}: read_when {phrase!r} does not route to {target} — "
+                + (f"{winner} ranks first for it" if winner else "it matches nothing")
+                + ". A phrase that points at the wrong doc is worse than no phrase."
+            )
+        if failures:
+            rejected.append(p.id)
+    return rejected
+
+
 def cmd_propose(args, rep: Reporter) -> int:
     cfg = _resolve_config(args)
     if args.file == "-":
@@ -1518,6 +1600,14 @@ def cmd_propose(args, rep: Reporter) -> int:
     # work in todos/apply. Warn loudly. Applied state comes from the flag OR the apply-log.
     landed = existing_ids & apply_engine.applied_ids_from_log(cfg)
     built = [proposals.build_from_partial(cfg, pt, approved=args.approved) for pt in partials]
+    # Routing that points at the wrong doc is rejected before it can be stored: a bad
+    # read_when outranks every other field, so storing it would poison retrieval until
+    # someone noticed by hand.
+    rejected = _routing_self_test(cfg, built, rep)
+    if rejected:
+        built = [p for p in built if p.id not in rejected]
+        if not built:
+            return 2
     replaced = [p.id for p in built if p.id in existing_ids]
     reactivated = [
         p.id for p in built if p.id in landed or (existing_by_id.get(p.id) and existing_by_id[p.id].applied)

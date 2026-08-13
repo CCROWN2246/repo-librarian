@@ -114,5 +114,61 @@ class ClaimTermsTests(unittest.TestCase):
         self.assertEqual(search.claim_terms(""), [])
 
 
+class RoutingSelfTestTests(unittest.TestCase):
+    """The accuracy wall for drafted routing: a phrase must rank its own doc first.
+
+    Routing was the only generative proposal type with nothing to check it against,
+    and it outweighs every other field in `rank` — so a wrong phrase quietly hijacks
+    another doc's task query.
+    """
+
+    ENTRIES = [
+        {
+            "path": "docs/etl.md",
+            "id": "etl",
+            "title": "ETL Pipeline",
+            "domain": "data",
+            "read_when": ["run the etl pipeline"],
+            "tags": [],
+        },
+        {
+            "path": "docs/billing.md",
+            "id": "billing",
+            "title": "Billing Runbook",
+            "domain": "finance",
+            "read_when": [],
+            "tags": [],
+        },
+    ]
+
+    def test_phrase_that_routes_correctly_passes(self):
+        self.assertEqual(
+            search.routing_failures(self.ENTRIES, "docs/billing.md", ["reconcile an invoice"]), []
+        )
+
+    def test_phrase_stolen_from_another_doc_fails(self):
+        failures = search.routing_failures(self.ENTRIES, "docs/billing.md", ["run the etl pipeline"])
+        self.assertEqual(failures, [("run the etl pipeline", "docs/etl.md")])
+
+    def test_reports_every_failing_phrase(self):
+        failures = search.routing_failures(
+            self.ENTRIES, "docs/billing.md", ["reconcile an invoice", "run the etl pipeline"]
+        )
+        self.assertEqual([p for p, _ in failures], ["run the etl pipeline"])
+
+    def test_uncatalogued_target_is_not_blocked(self):
+        # a brand-new doc has nothing to rank against; don't refuse what we can't judge
+        self.assertEqual(search.routing_failures(self.ENTRIES, "docs/new.md", ["anything at all"]), [])
+
+    def test_target_own_existing_phrase_still_passes(self):
+        # re-proposing a doc's current routing must not self-reject
+        self.assertEqual(search.routing_failures(self.ENTRIES, "docs/etl.md", ["run the etl pipeline"]), [])
+
+    def test_simulation_does_not_mutate_the_caller_entries(self):
+        before = [dict(e) for e in self.ENTRIES]
+        search.routing_failures(self.ENTRIES, "docs/billing.md", ["something new"])
+        self.assertEqual(self.ENTRIES, before)
+
+
 if __name__ == "__main__":
     unittest.main()

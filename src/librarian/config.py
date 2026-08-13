@@ -116,6 +116,11 @@ class Config:
     default_timeout: int = 60
     sources: dict[str, Source] = field(default_factory=dict)
     checks: list[Check] = field(default_factory=list)
+    # Machine-emitted checks the loader DROPPED, so `doctor` can say so out loud. A wired
+    # check that silently never runs is the worst failure this design can have: apply
+    # reports success, the check never executes, and nothing ever diagnoses it.
+    shadowed_checks: list[str] = field(default_factory=list)
+    invalid_generated_checks: list[str] = field(default_factory=list)
     # dream (overnight/on-nudge maintenance worklist)
     dream_nudge_after_days: int = 14  # 0 = disable the "dream is due" nudge
     dream_merge_similarity: float = 0.6  # metadata Jaccard to flag a merge candidate
@@ -375,7 +380,11 @@ def load(root: Path) -> Config:
     human_ids = {c.id for c in cfg.checks}
     for gen in proposals.load_generated_checks(cfg):
         gc = _check_from_generated(gen)
-        if gc is None or gc.id in human_ids or gc.id in seen_ids:
+        if gc is None:
+            cfg.invalid_generated_checks.append(str(gen.get("id", "?")) if isinstance(gen, dict) else "?")
+            continue
+        if gc.id in human_ids or gc.id in seen_ids:
+            cfg.shadowed_checks.append(gc.id)
             continue
         seen_ids.add(gc.id)
         cfg.checks.append(gc)

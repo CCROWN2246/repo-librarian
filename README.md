@@ -94,10 +94,11 @@ $ cd examples/demo-repo && librarian verify
 | `librarian connect DIR [--write]` | Scan a folder of data files and draft a check per file as reviewable `add_check` proposals |
 | `librarian status` | One-screen health summary (`--hook` powers the session nudge) |
 | `librarian search "task phrase"` | Route by `read_when`/`tags`/`title` — cheaper and truer than grep |
+| `librarian query [--kind K] [--count]` | Pointer+freshness retrieval: *where would I find this kind of code?* · *how many files of this type do we have?* |
 | `librarian backfill DIR --write` | Bulk-stamp skeleton frontmatter onto existing docs |
 | `librarian suggest [--write]` | Auto-draft registry entries for uncovered SQL/scripts/notebooks/CSVs (harvests comments, docstrings, headers) |
 | `librarian ingest FILE` | Triage an `_inbox/` upload: tier → frontmatter → file it |
-| `librarian dream [--json] [--mark-done]` | Build the maintenance worklist (conflicts, dup docs, weak routing); drives the `/librarian-dream` propose-only cycle |
+| `librarian dream [--json] [--mark-done] [--report]` | Build the maintenance worklist (conflicts, dup docs, weak routing); drives the `/librarian-dream` propose-only cycle. `--report` is the cron-safe deterministic half — leaves `_index/dream-report.md` waiting |
 | `librarian doctor` | Sanity-check config, registry, hooks, and verify sources |
 
 Exit codes everywhere: `0` clean · `1` findings (drift / gate / attention) · `2` config
