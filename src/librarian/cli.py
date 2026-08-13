@@ -228,6 +228,12 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="stamp the current worklist as reviewed (resets the 'dream is due' nudge)",
     )
+    sp.add_argument(
+        "--report",
+        action="store_true",
+        help=f"write the worklist to {{index}}/{dream.REPORT_FILE} for an unattended (cron) run; "
+        "the next session's greeting says a report is waiting",
+    )
 
     sp = sub.add_parser(
         "query", help="retrieve catalog pointers (id/path/freshness) by filter — pure stdlib, no bodies"
@@ -889,6 +895,11 @@ def cmd_status(args, rep: Reporter) -> int:
     dream_due, _dream_reason = dream.is_due(cfg, dream_wl)
     if dream_due:
         attention.append(f"{dream_wl.total} maintenance item(s) ready — run /librarian-dream")
+    # An unattended `dream --report` run left a worklist waiting. Distinct from the live
+    # dream-due nudge: this one says the work was already computed while you were away.
+    # File existence only — the hook stays catalog-cheap, no filesystem walk.
+    if (cfg.path(cfg.index_dir) / dream.REPORT_FILE).is_file():
+        attention.append(f"a dream report is waiting — {cfg.index_dir}/{dream.REPORT_FILE}")
     # SYS: a scaffold written by an older librarian silently persists stale protocol/glue
     # (the whole stale-scaffold false-feedback class). Surface the upgrade nudge.
     scaffold_nudge = scaffold.scaffold_staleness(cfg)
@@ -1269,9 +1280,22 @@ def cmd_dream(args, rep: Reporter) -> int:
     wl.failing_checks = verify.failing_checks(cfg)
     if args.mark_done:
         dream.mark_done(cfg, wl)
+        # The report has served its purpose once the worklist is reviewed; leaving it would
+        # make the greeting nag about a report the human already acted on.
+        (cfg.path(cfg.index_dir) / dream.REPORT_FILE).unlink(missing_ok=True)
         rep.say(f"marked {wl.total} worklist item(s) reviewed — the dream nudge is reset.")
         return 0
     due, reason = dream.is_due(cfg, wl)
+    if args.report:
+        out = cfg.path(cfg.index_dir)
+        out.mkdir(parents=True, exist_ok=True)
+        (out / dream.REPORT_FILE).write_text(
+            dream.render_report(wl, config.today(), due, reason), encoding="utf-8"
+        )
+        rep.say(
+            f"wrote {cfg.index_dir}/{dream.REPORT_FILE} ({wl.total} item(s), {'due' if due else 'not due'})"
+        )
+        return 1 if due else 0
     if args.json:
         rep.emit_json({"due": due, "reason": reason, "worklist": wl.to_dict()})
         return 1 if due else 0

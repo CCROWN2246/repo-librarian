@@ -28,11 +28,13 @@ import json
 import re
 import time
 from dataclasses import dataclass, field
+from datetime import date
 
 from .catalog import CatalogResult
 from .config import Config
 
 STATE_FILE = ".last_dream"
+REPORT_FILE = "dream-report.md"
 DEFAULT_MERGE_SIMILARITY = 0.6
 MAX_MERGE_CANDIDATES = 10
 # Terminal statuses that mean "the author already retired this" — positive evidence
@@ -257,6 +259,56 @@ def from_catalog_json(data: dict, merge_threshold: float = DEFAULT_MERGE_SIMILAR
         list(flags.get("coverage_gaps", [])),
         merge_threshold,
     )
+
+
+def render_report(wl: Worklist, today: date, due: bool, reason: str) -> str:
+    """The unattended-run artifact: a worklist a human finds waiting in the morning.
+
+    Deterministic (dated from the injectable clock, everything sorted), so a nightly cron
+    that finds nothing new rewrites a byte-identical file instead of churning the diff.
+
+    Only the DETERMINISTIC half of the dream runs unattended. The judgment half stays
+    in-chat: drafting proposals needs an agent, and shelling out to one from cron would
+    put a nondeterministic writer in the repo with nobody watching AND add a runtime
+    dependency on an external LLM binary — which is the zero-dependency promise gone.
+    """
+    lines = [
+        "# Dream report",
+        "",
+        f"_Generated {today.isoformat()} by `librarian dream --report`. "
+        "Deterministic worklist only — no proposals were drafted._",
+        "",
+        f"**{'DUE' if due else 'Not due'}** — {reason}",
+        "",
+    ]
+    sections: list[tuple[str, list[str]]] = [
+        ("Failing checks", [f"`{x['id']}` → {x['doc']}" for x in wl.failing_checks]),
+        ("Open conflicts", [f"{x['path']}:{x['line']}" for x in wl.open_conflicts]),
+        (
+            "Merge candidates",
+            [f"{x['a']} ↔ {x['b']} (sim {x['similarity']}, {x['domain']})" for x in wl.merge_candidates],
+        ),
+        ("Routing TODOs", [x["path"] for x in wl.read_when_todos]),
+        ("Absence claims to audit", [f"{x['path']}:{x['line']}" for x in wl.absence_claims]),
+        ("Retirement candidates", [f"{x['path']} ({x['evidence']})" for x in wl.retirement_candidates]),
+        ("Coverage gaps (advisory)", [x["path"] for x in wl.coverage_gaps]),
+    ]
+    any_items = False
+    for title, items in sections:
+        if not items:
+            continue
+        any_items = True
+        lines.append(f"## {title} ({len(items)})")
+        lines.append("")
+        lines.extend(f"- {i}" for i in items)
+        lines.append("")
+    if not any_items:
+        lines.append("Nothing outstanding. The corpus is clean.")
+        lines.append("")
+    lines.append("---")
+    lines.append("")
+    lines.append("Run `/librarian-dream` to draft proposals for these, or `librarian dream --mark-done`.")
+    return "\n".join(lines) + "\n"
 
 
 def load_state(cfg: Config) -> dict:

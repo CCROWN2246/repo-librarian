@@ -1,3 +1,4 @@
+import datetime
 import unittest
 
 from helpers import RepoCase, make_doc
@@ -252,6 +253,84 @@ class ContentHashTests(unittest.TestCase):
         c = dream.Worklist(open_conflicts=[{"path": "d.md", "line": 2, "text": "x"}])
         self.assertEqual(a.content_hash(), b.content_hash())
         self.assertNotEqual(a.content_hash(), c.content_hash())
+
+
+class ReportTests(unittest.TestCase):
+    """The unattended-run artifact. Deterministic half only: cron computes the worklist,
+    a human does the judgment in-chat."""
+
+    def _wl(self):
+        return dream.Worklist(
+            open_conflicts=[{"path": "d.md", "line": 3, "text": "x"}],
+            read_when_todos=[
+                {"path": "q.sql", "id": "q", "kind": "sql", "title": "Q", "domain": "d", "read_when": []}
+            ],
+        )
+
+    def test_report_is_deterministic(self):
+        today = datetime.date(2026, 8, 13)
+        a = dream.render_report(self._wl(), today, True, "never dreamt")
+        b = dream.render_report(self._wl(), today, True, "never dreamt")
+        self.assertEqual(a, b)
+
+    def test_report_lists_every_populated_bucket(self):
+        out = dream.render_report(self._wl(), datetime.date(2026, 8, 13), True, "never dreamt")
+        self.assertIn("Open conflicts (1)", out)
+        self.assertIn("d.md:3", out)
+        self.assertIn("Routing TODOs (1)", out)
+        self.assertIn("q.sql", out)
+        self.assertIn("**DUE**", out)
+
+    def test_empty_worklist_says_so(self):
+        out = dream.render_report(dream.Worklist(), datetime.date(2026, 8, 13), False, "nothing to do")
+        self.assertIn("Nothing outstanding", out)
+        self.assertIn("**Not due**", out)
+
+    def test_report_states_no_proposals_were_drafted(self):
+        # the honesty line: an unattended run computes, it never generates
+        out = dream.render_report(dream.Worklist(), datetime.date(2026, 8, 13), False, "clean")
+        self.assertIn("no proposals were drafted", out)
+
+
+class ReportCliTests(RepoCase):
+    def run_sub(self, command, *argv):
+        import contextlib
+        import io
+
+        from librarian import cli
+
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            code = cli.main([command, "--root", str(self.root), *argv])
+        return code, out.getvalue(), err.getvalue()
+
+    def seed(self):
+        self.write("docs/a.md", make_doc(id="a", status="retired", read_when=""))
+        self.run_sub("index")
+
+    def test_cron_writes_report_and_greeting_announces_it(self):
+        self.seed()
+        code, out, _ = self.run_sub("dream", "--report")
+        self.assertEqual(code, 1)  # due
+        report = self.root / "_index" / dream.REPORT_FILE
+        self.assertTrue(report.is_file())
+        _, hook_out, _ = self.run_sub("status", "--hook")
+        self.assertIn("a dream report is waiting", hook_out)
+
+    def test_rerun_is_byte_identical(self):
+        self.seed()
+        self.run_sub("dream", "--report")
+        first = (self.root / "_index" / dream.REPORT_FILE).read_text(encoding="utf-8")
+        self.run_sub("dream", "--report")
+        self.assertEqual((self.root / "_index" / dream.REPORT_FILE).read_text(encoding="utf-8"), first)
+
+    def test_mark_done_clears_the_report(self):
+        self.seed()
+        self.run_sub("dream", "--report")
+        self.run_sub("dream", "--mark-done")
+        self.assertFalse((self.root / "_index" / dream.REPORT_FILE).exists())
+        _, hook_out, _ = self.run_sub("status", "--hook")
+        self.assertNotIn("dream report is waiting", hook_out)
 
 
 if __name__ == "__main__":

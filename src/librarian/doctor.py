@@ -8,7 +8,7 @@ import subprocess
 import sys
 from dataclasses import dataclass, field
 
-from . import catalog, config, proposals, registry, verify
+from . import catalog, checks, config, proposals, registry, verify
 from .config import Config
 
 
@@ -97,6 +97,26 @@ def run(cfg: Config) -> DoctorReport:
             )
         else:
             rep.ok(f"{cfg.index_dir}/ state is tracked ({len(irreplaceable)} irreplaceable file(s))")
+
+    # V4: data files no verify check guards. The doc-side coverage scan has always nudged
+    # about an unchecked claim; this is its data-side twin, and it is also the only thing
+    # that surfaces `connect` — without it you have to already know the command exists.
+    # Lives in doctor, not the status hook: it walks the filesystem, and the hook is
+    # deliberately catalog-only so it stays cheap enough to run on every prompt.
+    guarded = " ".join((c.cmd or "") + " " + (c.arg or "") for c in cfg.checks)
+    try:
+        draftable, _skipped = checks.scan(cfg, ".")
+    except OSError:
+        draftable = []
+    unguarded = [rel for rel in draftable if rel not in guarded]
+    if unguarded:
+        shown = ", ".join(unguarded[:3]) + (f", +{len(unguarded) - 3} more" if len(unguarded) > 3 else "")
+        rep.warn(
+            f"{len(unguarded)} data file(s) no verify check guards ({shown}) — "
+            "`librarian connect <dir>` drafts a row-count and schema guard for each"
+        )
+    elif draftable:
+        rep.ok(f"data coverage: all {len(draftable)} scannable data file(s) are guarded by a check")
 
     # Machine-emitted checks the loader dropped. Silence here is the dangerous case: the
     # agent is told the check was registered, and it never runs.
