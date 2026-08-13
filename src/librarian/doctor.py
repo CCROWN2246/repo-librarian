@@ -8,7 +8,7 @@ import subprocess
 import sys
 from dataclasses import dataclass, field
 
-from . import catalog, config, registry, verify
+from . import catalog, config, proposals, registry, verify
 from .config import Config
 
 
@@ -48,15 +48,30 @@ def run(cfg: Config) -> DoctorReport:
     if stale:
         rep.warn(stale)
 
-    # Registry
-    if cfg.path(cfg.artifacts_file).is_file():
-        arts, errors = registry.load(cfg)
-        if errors:
-            for e in errors:
-                rep.problem(e)
-        rep.ok(f"artifact registry: {len(arts)} valid entr{'y' if len(arts) == 1 else 'ies'}")
+    # Registry (hand-authored TOML + the machine-authored overlay)
+    arts, errors = registry.load(cfg)
+    generated = registry.load_generated(cfg)
+    for e in errors:
+        rep.problem(e)
+    if cfg.path(cfg.artifacts_file).is_file() or generated:
+        machine = sum(1 for a in arts if a.get("_generated_fields"))
+        detail = f" ({machine} carrying machine-authored fields)" if machine else ""
+        rep.ok(f"artifact registry: {len(arts)} valid entr{'y' if len(arts) == 1 else 'ies'}{detail}")
     else:
         rep.warn(f"no {cfg.artifacts_file} — non-markdown artifacts are uncatalogued")
+
+    # Machine-emitted checks the loader dropped. Silence here is the dangerous case: the
+    # agent is told the check was registered, and it never runs.
+    for cid in cfg.shadowed_checks:
+        rep.problem(
+            f"generated check {cid!r} is SHADOWED by a hand-written check of the same id in "
+            f"{config.CONFIG_NAME} — the generated one never runs. Rename one of them."
+        )
+    for cid in cfg.invalid_generated_checks:
+        rep.problem(
+            f"generated check {cid!r} in {proposals.GENERATED_CHECKS_FILE} is malformed and was "
+            "skipped (needs id, kind, exactly one of cmd/arg, and expect for assert)"
+        )
 
     # Git hook wiring
     if (cfg.root / ".git").exists():

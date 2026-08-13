@@ -136,7 +136,15 @@ def _merge_generated(cfg: Config, artifacts: list[dict], seen_ids: set[str]) -> 
                 existing["_generated_fields"] = sorted(set(existing.get("_generated_fields", []) + filled))
             continue
         entry = {"path": path, **fields}
+        # "Provisional propagates." A wholly machine-authored entry has never been seen by a
+        # human, so it enters at the lowest trust tier and STALENESS surfaces it for review.
+        # An overlay that merely FILLS a gap on a human's entry does not downgrade it — the
+        # doc's authority is about its content, and `_generated_fields` already records which
+        # individual fields the machine wrote.
+        entry.setdefault("authority", "unverified")
         problems = [f"missing {k!r}" for k in REQUIRED if k not in entry]
+        if entry["authority"] not in cfg.authorities:
+            problems.append(f"authority {entry['authority']!r} not in {cfg.authorities}")
         if entry.get("id") in seen_ids:
             problems.append(f"duplicate id {entry.get('id')!r}")
         if problems:

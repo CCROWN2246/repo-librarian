@@ -236,6 +236,55 @@ class ArtifactRoutingTests(ApplyCase):
         _, errors = registry.load(self.cfg())
         self.assertTrue(any("missing" in e for e in errors), errors)
 
+    def test_machine_authored_entry_enters_as_unverified(self):
+        # "provisional propagates" — a wholly machine-authored entry no human has seen
+        # enters at the lowest trust tier so STALENESS surfaces it for review
+        from librarian import registry
+
+        registry.upsert_generated(
+            self.cfg(),
+            "queries/orphan.sql",
+            {"id": "orphan", "title": "Orphan", "domain": "data", "kind": "sql", "status": "reference"},
+        )
+        arts, errors = registry.load(self.cfg())
+        self.assertEqual(errors, [])
+        self.assertEqual(arts[0]["authority"], "unverified")
+
+    def test_overlay_does_not_downgrade_a_human_entry(self):
+        # filling a gap is not a claim about the doc's content; _generated_fields carries
+        # the provenance instead
+        self.write("queries/active.sql", "-- x\nSELECT 1;\n")
+        self.write(
+            "librarian-artifacts.toml",
+            '[[artifact]]\npath = "queries/active.sql"\nid = "active-sql"\n'
+            'title = "Active customers"\ndomain = "data"\nkind = "sql"\nstatus = "reference"\n'
+            'authority = "curated"\nread_when = []\n',
+        )
+        from librarian import registry
+
+        registry.upsert_generated(self.cfg(), "queries/active.sql", {"read_when": ["find customers"]})
+        entry = next(a for a in registry.load(self.cfg())[0] if a["path"] == "queries/active.sql")
+        self.assertEqual(entry["authority"], "curated")
+        self.assertEqual(entry["_generated_fields"], ["read_when"])
+
+    def test_invalid_machine_authority_is_reported(self):
+        from librarian import registry
+
+        registry.upsert_generated(
+            self.cfg(),
+            "queries/orphan.sql",
+            {
+                "id": "o",
+                "title": "O",
+                "domain": "d",
+                "kind": "sql",
+                "status": "reference",
+                "authority": "bogus",
+            },
+        )
+        _, errors = registry.load(self.cfg())
+        self.assertTrue(any("authority" in e for e in errors), errors)
+
     def test_corrupt_sidecar_does_not_brick_the_registry(self):
         self.write("_index/generated-artifacts.json", "{ not json")
         from librarian import registry
