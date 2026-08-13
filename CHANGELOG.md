@@ -5,6 +5,52 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
+### Added — the librarian indexes files itself (v1 track)
+The goal this release serves: as you add files to a repo, the librarian writes their metadata
+and shelves them, so a query gets an accurate, provably-fresh answer — and **the human never
+has to hand-author metadata in TOML.**
+
+- **`librarian query --kind` and `--count`.** The catalog could not answer the two questions
+  it exists for — "how many files of this type do we have", "where would I find this kind of
+  code". `kind` was emitted per row but not filterable, and there was no count. `--count`
+  reports totals with a per-kind breakdown and ignores the `-n` display cap, because a count
+  that silently stopped at the cap would be a wrong number.
+- **Machine-authored artifact metadata** (`_index/generated-artifacts.json`). SQL, CSV and
+  notebooks can't carry frontmatter — that's why the registry exists — and until now the
+  machine could not write to it at all. One merge rule: **the machine fills gaps and never
+  overwrites human intent.** An overlay fills only fields left empty or marked TODO; an
+  overlay for an unregistered path stands alone. A repo with no `librarian-artifacts.toml`
+  at all is now fully indexable by the AI.
+- **Routing must prove itself.** A drafted `read_when` is verified against `search.rank`
+  before it can be stored: the phrase must actually rank its own doc first, or `propose`
+  refuses it and names the doc that outranked it. Deterministic, zero-token, and it closes
+  the last generative proposal type that had no accuracy wall.
+- **`librarian dream --report`** writes `_index/dream-report.md` for an unattended (cron) run;
+  the next session's greeting says a report is waiting, and `--mark-done` clears it. The
+  deterministic half only — see `docs/dream.md` for why the judgment half stays in-chat.
+- **Data-side coverage nudge.** `doctor` names data files no verify check guards and points
+  at `librarian connect` — previously nothing surfaced that command at all.
+
+### Fixed
+- **Routing an artifact was structurally impossible, and failed as an infinite loop.**
+  `set_read_when` only ever touched frontmatter, so every non-`.md` target returned
+  STALE("re-dream") — while dream's `read_when_todos` bucket feeds it artifacts and
+  `suggest --write` stamps `read_when = []  # TODO` on every one. The documented path
+  (`suggest --write` → `dream` → propose → apply) looped forever, on the class of file that
+  most needs machine-written routing, for the highest-weighted field in retrieval.
+- **`set_read_when` had no validation at all.** `{"read_when": []}` read as "set routing" but
+  silently DELETED it, and apply reported success. Now rejects empty lists, blank phrases,
+  TODO placeholders and duplicates.
+- **Machine-authored entries no longer claim human standing.** A wholly machine-authored
+  artifact enters at `authority: unverified` so STALENESS surfaces it; filling a gap on a
+  human's entry does not downgrade it (`_generated_fields` carries the provenance instead).
+- **Shadowing is loud.** `config.load` silently dropped a generated check whose id collided
+  with a hand-written one, and `doctor` never inspected the sidecar — so a check the agent
+  was told it registered would simply never run. Both the shadowed and the malformed cases
+  are now reported as problems.
+- **`doctor` flags gitignored `_index/`**, the configuration where regenerating the index
+  destroys irreplaceable machine-authored state with no way back.
+
 ### Added — wiring `verify` to your data (pre-beta onboarding, V2 + V3)
 The verify *engine* could always point at any shell command, but reaching it meant hand-writing
 TOML and knowing the `extract` spec from a code docstring. Two commands close that gap:

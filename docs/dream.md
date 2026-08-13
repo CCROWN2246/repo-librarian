@@ -58,13 +58,54 @@ You review the report, apply what you agree with, `librarian index`. The report 
 queue — the same design gbrain settled on ("auto-accept is intentionally NOT a thing"), and doubly
 right for a company KB where a wrong "fix" propagates.
 
+## Unattended runs (`dream --report`)
+
+The dream has two halves, and only one of them should ever run with nobody watching:
+
+```
+        DETERMINISTIC HALF                    JUDGMENT HALF
+        `librarian dream`                     `/librarian-dream`
+        ─────────────────────                 ────────────────────
+        walks the catalog                     reads the actual docs
+        finds conflicts, dupes,               decides what's really a
+        routing gaps, retirements             duplicate / a real conflict
+        zero tokens, pure, offline            drafts proposals
+                │                                     │
+                │  safe to cron ✓                     │  needs a human ✗
+                ▼                                     ▼
+        _index/dream-report.md ───► session greeting ───► you review in chat
+```
+
+Schedule the deterministic half and let it leave a report:
+
+```cron
+# 03:00 daily — compute the worklist, write the report, commit it.
+0 3 * * *  cd /path/to/repo && librarian index && librarian dream --report && \
+           git add _index && git commit -m "chore(librarian): nightly worklist" || true
+```
+
+Next session, the greeting says `a dream report is waiting — _index/dream-report.md`. Read it, run
+`/librarian-dream` to draft proposals for what matters, and `librarian dream --mark-done` clears the
+report so the greeting stops mentioning it.
+
+The report is deterministic: an unchanged worklist rewrites a byte-identical file, so a nightly cron
+on a quiet corpus produces no diff at all.
+
+**Why the judgment half is not cronned.** Running `/librarian-dream` unattended means shelling out to
+an LLM CLI — a runtime dependency on an external binary (the zero-dependency promise gone) and a
+nondeterministic writer touching the repo with nobody watching. The propose-only wall exists because
+a wrong "fix" propagates; removing the human from the loop is exactly the thing it guards against.
+Propose-only is not a limitation to automate away; it is the product.
+
 ## Cost & cadence
 
-At the tool's target scale (~200–300 docs) most nights have no delta, so a strict nightly cron
-would mostly pay to do nothing. Prefer the **session-start nudge** (free; fires only when due) or a
-**weekly cron**. If you do schedule it headless (`claude -p`), note that as of mid-2026 programmatic
-runs bill a separate metered pool rather than your interactive quota — cheap for this workload
-(single dollars/month with Haiku/Sonnet and the delta gate), but not literally free.
+At the tool's target scale (~200–300 docs) most nights have no delta, so even the deterministic cron
+mostly finds nothing — which is cheap (zero tokens) and correct. The **session-start nudge** is free
+and fires only when due; `--report` is for when you want the worklist waiting rather than computed
+on arrival. If you ever schedule the *judgment* half headless (`claude -p`), note that as of mid-2026
+programmatic runs bill a separate metered pool rather than your interactive quota — cheap for this
+workload (single dollars/month with Haiku/Sonnet and the delta gate), but not literally free, and it
+gives up the human review the design is built around.
 
 ## Config
 
