@@ -11,7 +11,7 @@ import json
 import unittest
 from pathlib import Path
 
-from helpers import RepoCase
+from helpers import RepoCase, make_doc
 from librarian import config, proposals
 from librarian.proposals import ProposalError
 
@@ -337,6 +337,52 @@ class SidecarAndConfigTests(RepoCase):
     def test_enrich_ttl_parse(self):
         cfg = self.cfg("\n[enrich]\nprovisional_ttl_days = 7\n")
         self.assertEqual(cfg.enrich_provisional_ttl_days, 7)
+
+
+class SetReadWhenValidationTests(RepoCase):
+    """read_when is the highest-weighted field in search.rank, and was the only
+    proposal type with no validation branch at all."""
+
+    def _partial(self, read_when):
+        return {
+            "type": "set_read_when",
+            "targets": [{"path": "d.md"}],
+            "action": {"read_when": read_when},
+            "rationale": "routing",
+        }
+
+    def setUp(self):
+        super().setUp()
+        self.write("d.md", make_doc())
+
+    def test_empty_list_is_rejected(self):
+        # it reads as "set routing" but DELETES it, and apply reported success
+        with self.assertRaises(proposals.ProposalError) as ctx:
+            proposals.build_from_partial(self.cfg(), self._partial([]))
+        self.assertIn("DELETES", str(ctx.exception))
+
+    def test_todo_placeholder_is_rejected(self):
+        with self.assertRaises(proposals.ProposalError) as ctx:
+            proposals.build_from_partial(self.cfg(), self._partial(["TODO: write phrases"]))
+        self.assertIn("placeholder", str(ctx.exception))
+
+    def test_blank_phrase_is_rejected(self):
+        with self.assertRaises(proposals.ProposalError):
+            proposals.build_from_partial(self.cfg(), self._partial(["ok phrase", "   "]))
+
+    def test_duplicate_phrases_are_rejected(self):
+        with self.assertRaises(proposals.ProposalError) as ctx:
+            proposals.build_from_partial(self.cfg(), self._partial(["run the etl", "Run The ETL"]))
+        self.assertIn("duplicate", str(ctx.exception))
+
+    def test_non_list_is_rejected(self):
+        with self.assertRaises(proposals.ProposalError):
+            proposals.build_from_partial(self.cfg(), self._partial("run the etl"))
+
+    def test_valid_phrases_pass(self):
+        p = proposals.build_from_partial(self.cfg(), self._partial(["run the etl", "debug a pipeline"]))
+        self.assertEqual(p.type, "set_read_when")
+        self.assertEqual(p.action["read_when"], ["run the etl", "debug a pipeline"])
 
 
 if __name__ == "__main__":

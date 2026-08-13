@@ -298,6 +298,33 @@ def _validate_type_specifics(p: Proposal, where: str) -> None:
             f"{where}: enrich_create requires non-empty provenance.evidence — the live-source value "
             "that justifies the draft. Empty/zero source => flag the gap, never draft (R1).",
         )
+    elif p.type == "set_read_when":
+        # read_when is the highest-weighted field in search.rank (+10 whole-phrase vs +2
+        # title), so a bad one is worse than none: empty makes a doc invisible (a false
+        # negative you notice), wrong makes the WRONG doc rank first for a task phrase.
+        # An empty list is the sharp edge — it reads as "set routing" but silently DELETES
+        # it, and apply reported "set read_when (0 phrase(s))" as success.
+        rw = a.get("read_when")
+        _require(isinstance(rw, list), f"{where}: set_read_when requires action.read_when to be a list")
+        _require(
+            bool(rw),
+            f"{where}: set_read_when needs at least one phrase — an empty list DELETES the doc's "
+            "routing rather than setting it. Use an archive/ack proposal if retirement is the intent.",
+        )
+        _require(
+            all(isinstance(x, str) and x.strip() for x in rw),
+            f"{where}: every read_when phrase must be a non-empty string",
+        )
+        placeholders = [x for x in rw if "todo" in x.lower()]
+        if placeholders:
+            raise ProposalError(
+                f"{where}: read_when phrase {placeholders[0]!r} is a placeholder, not routing — "
+                "TODO text is the gap this proposal exists to close."
+            )
+        _require(
+            len({x.strip().lower() for x in rw}) == len(rw),
+            f"{where}: duplicate read_when phrases add no routing signal",
+        )
     elif p.type == "add_check":
         chk = a.get("check")
         _require(
